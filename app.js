@@ -1,5 +1,5 @@
-const STORAGE_KEY = "gestione_eventi_arbitri_v1";
-let events = loadEvents();
+const API_URL = "https://script.google.com/macros/s/AKfycbzhaYuZzBYtMrgE5YCYohTH6Zg_TAY-cIgtah39dvAKj5fN-1lAFonX6_nhM7QSXcfw/exec";
+let events = [];
 let activeEventId = null;
 let tempAvailable = new Set();
 let tempAssigned = new Set();
@@ -8,12 +8,141 @@ let tempCustomArbiters = [];
 const $ = id => document.getElementById(id);
 const fullName = a => `${a.nome} ${a.cognome}`;
 
-function loadEvents(){
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-  catch(e){ return []; }
-}
-function saveEvents(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(events)); }
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+function apiGet(params){
+  return new Promise((resolve,reject)=>{
+    const callback="cb_"+uid();
+    const script=document.createElement("script");
+    const query=new URLSearchParams({...params,callback});
+    const cleanup=()=>{
+      delete window[callback];
+      script.remove();
+    };
+    window[callback]=data=>{
+      cleanup();
+      if(data && data.ok===false) reject(new Error(data.error||"Errore API"));
+      else resolve(data);
+    };
+    script.onerror=()=>{
+      cleanup();
+      reject(new Error("Impossibile contattare il database condiviso."));
+    };
+    script.src=API_URL+"?"+query.toString();
+    document.body.appendChild(script);
+  });
+}
+
+async function loadFromServer(){
+  try{
+    const data=await apiGet({action:"get"});
+    events=Array.isArray(data.events)?data.events:[];
+    renderEvents();
+  }catch(err){
+    console.error(err);
+    $("eventsList").innerHTML=`<div class="empty"><strong>Errore di collegamento al database</strong><br>${escapeHtml(err.message)}<br><br>Ricarica la pagina e riprova.</div>`;
+  }
+}
+
+async function migrateLegacyDataIfNeeded(){
+  const LEGACY_KEY="gestione_eventi_arbitri_v1";
+  const raw=localStorage.getItem(LEGACY_KEY);
+  if(!raw) return;
+
+  let legacy;
+  try{
+    legacy=JSON.parse(raw);
+  }catch(err){
+    console.warn("Dati locali precedenti non leggibili.",err);
+    return;
+  }
+
+  if(!Array.isArray(legacy) || legacy.length===0) return;
+
+  // Il database è vuoto: proponiamo una migrazione sicura dei dati
+  // presenti nel browser usato finora.
+  if(events.length>0){
+    alert(
+      `Ho trovato ${legacy.length} eventi salvati nella vecchia versione, `+
+      `ma il database condiviso contiene già ${events.length} eventi. `+
+      `Per evitare duplicati non li importo automaticamente.`
+    );
+    return;
+  }
+
+  const ok=confirm(
+    `Ho trovato ${legacy.length} eventi inseriti nella versione precedente.\\n\\n`+
+    `Vuoi importarli nel nuovo database condiviso?\\n\\n`+
+    `Le disponibilità e le designazioni verranno mantenute.`
+  );
+
+  if(!ok) return;
+
+  const originalText=$("eventsList").innerHTML;
+  $("eventsList").innerHTML=
+    `<div class="empty"><strong>Importazione in corso…</strong><br>`+
+    `Sto trasferendo gli eventi nel database condiviso.</div>`;
+
+  try{
+    for(const event of legacy){
+      const migrated={
+        ...event,
+        id:event.id || uid(),
+        available:Array.isArray(event.available)?event.available:[],
+        assigned:Array.isArray(event.assigned)?event.assigned:[],
+        manualArbiters:Array.isArray(event.manualArbiters)?event.manualArbiters:[]
+      };
+
+      await apiGet({
+        action:"saveEvent",
+        event:JSON.stringify(migrated)
+      });
+
+      const records = [];
+      const ids=[...new Set([
+        ...migrated.available,
+        ...migrated.assigned,
+        ...migrated.manualArbiters.map(a=>a.id)
+      ])];
+
+      const manualMap={};
+      migrated.manualArbiters.forEach(a=>{
+        manualMap[String(a.id)]=String(a.nome||"");
+      });
+
+      ids.forEach(id=>{
+        records.push({
+          id:String(id),
+          name:manualMap[String(id)]||"",
+          available:migrated.available.includes(id),
+          assigned:migrated.assigned.includes(id),
+          manual:Object.prototype.hasOwnProperty.call(manualMap,String(id))
+        });
+      });
+
+      await apiGet({
+        action:"saveParticipants",
+        eventId:migrated.id,
+        available:JSON.stringify(migrated.available),
+        assigned:JSON.stringify(migrated.assigned),
+        manual:JSON.stringify(migrated.manualArbiters)
+      });
+    }
+
+    localStorage.removeItem(LEGACY_KEY);
+
+    const data=await apiGet({action:"get"});
+    events=Array.isArray(data.events)?data.events:[];
+    renderEvents();
+
+    alert(`Importazione completata: ${events.length} eventi ora sono nel database condiviso.`);
+  }catch(err){
+    console.error(err);
+    $("eventsList").innerHTML=originalText;
+    alert("Importazione non completata: "+err.message);
+  }
+}
+
 function statusOf(e){
   const n = (e.assigned||[]).length, r = Number(e.required)||0;
   if(n===0) return "none";
@@ -69,7 +198,7 @@ window.duplicateEvent=id=>{
     manualArbiters:[],
   };
   events.push(copy);
-  saveEvents();
+  renderEvents();
   openEventForm(copy);
 };
 
@@ -91,13 +220,40 @@ function closeEventForm(){ $("modal").classList.add("hidden"); }
 $("newEventBtn").onclick=()=>openEventForm();
 $("closeModalBtn").onclick=closeEventForm;
 $("cancelBtn").onclick=closeEventForm;
-$("eventForm").onsubmit=e=>{
+$("eventForm").onsubmit=async e=>{
   e.preventDefault();
   const id=$("eventId").value||uid();
   const existing=events.find(x=>x.id===id);
-  const obj={id,date:$("eventDate").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,type:$("eventType").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,required:Number($("eventRequired").value),name:$("eventName").value.trim(),place:$("eventPlace").value.trim(),notes:$("eventNotes").value.trim(),available:existing?.available||[],assigned:existing?.assigned||[],manualArbiters:existing?.manualArbiters||[]};
-  if(existing) Object.assign(existing,obj); else events.push(obj);
-  saveEvents(); closeEventForm(); renderEvents();
+  const obj={
+    id,
+    date:$("eventDate").value,
+    startTime:$("eventStartTime").value,
+    endTime:$("eventEndTime").value,
+    type:$("eventType").value,
+    required:Number($("eventRequired").value),
+    name:$("eventName").value.trim(),
+    place:$("eventPlace").value.trim(),
+    notes:$("eventNotes").value.trim(),
+    available:existing?.available||[],
+    assigned:existing?.assigned||[],
+    manualArbiters:existing?.manualArbiters||[]
+  };
+
+  const saveBtn=$("eventForm").querySelector('button[type="submit"]');
+  saveBtn.disabled=true;
+  saveBtn.textContent="Salvataggio…";
+
+  try{
+    await apiGet({action:"saveEvent",event:JSON.stringify(obj)});
+    if(existing) Object.assign(existing,obj); else events.push(obj);
+    closeEventForm();
+    renderEvents();
+  }catch(err){
+    alert("Errore nel salvataggio: "+err.message);
+  }finally{
+    saveBtn.disabled=false;
+    saveBtn.textContent="Salva evento";
+  }
 };
 
 function openDetail(id){
@@ -198,17 +354,49 @@ $("manualArbiterName").addEventListener("keydown",e=>{
   if(e.key==="Enter"){e.preventDefault();$("addManualArbiterBtn").click();}
 });
 
-$("saveDetailBtn").onclick=()=>{
+$("saveDetailBtn").onclick=async ()=>{
   const e=events.find(x=>x.id===activeEventId);
-  e.available=[...tempAvailable]; e.assigned=[...tempAssigned]; e.manualArbiters=[...tempCustomArbiters];
-  saveEvents(); $("detailModal").classList.add("hidden"); renderEvents();
+  const btn=$("saveDetailBtn");
+  btn.disabled=true;
+  btn.textContent="Salvataggio…";
+
+  try{
+    await apiGet({
+      action:"saveParticipants",
+      eventId:e.id,
+      available:JSON.stringify([...tempAvailable]),
+      assigned:JSON.stringify([...tempAssigned]),
+      manual:JSON.stringify(tempCustomArbiters)
+    });
+
+    e.available=[...tempAvailable];
+    e.assigned=[...tempAssigned];
+    e.manualArbiters=[...tempCustomArbiters];
+
+    $("detailModal").classList.add("hidden");
+    renderEvents();
+  }catch(err){
+    alert("Errore nel salvataggio delle disponibilità: "+err.message);
+  }finally{
+    btn.disabled=false;
+    btn.textContent="Salva disponibilità e designazioni";
+  }
 };
-$("deleteEventBtn").onclick=()=>{
-  if(confirm("Eliminare definitivamente questo evento?")){
-    events=events.filter(x=>x.id!==activeEventId); saveEvents(); $("detailModal").classList.add("hidden"); renderEvents();
+$("deleteEventBtn").onclick=async ()=>{
+  if(!confirm("Eliminare definitivamente questo evento?")) return;
+
+  try{
+    await apiGet({action:"deleteEvent",eventId:activeEventId});
+    events=events.filter(x=>x.id!==activeEventId);
+    $("detailModal").classList.add("hidden");
+    renderEvents();
+  }catch(err){
+    alert("Errore nell'eliminazione: "+err.message);
   }
 };
 $("eventSearch").oninput=renderEvents;
 $("statusFilter").onchange=renderEvents;
 
 renderEvents();
+loadFromServer().then(()=>migrateLegacyDataIfNeeded());
+
