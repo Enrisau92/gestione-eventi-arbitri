@@ -2,6 +2,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbzhaYuZzBYtMrgE5YCYohTH
 let events = [];
 let activeEventId = null;
 let tempAvailable = new Set();
+let tempAvailability = new Map();
 let tempAssigned = new Set();
 let tempCustomArbiters = [];
 
@@ -57,31 +58,27 @@ function formatDate(d){
   return `${day}/${m}/${y}`;
 }
 function renderEvents(){
-  const q = $("eventSearch").value.trim().toLowerCase();
-  const filter = $("statusFilter").value;
-  const list = events.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||""));
-  const filtered = list.filter(e=>{
-    const text = `${e.name} ${e.type} ${e.place}`.toLowerCase();
-    const okQ = !q || text.includes(q);
-    const okS = filter==="all" || statusOf(e)===filter;
-    return okQ && okS;
+  const q=$("eventSearch").value.trim().toLowerCase(), filter=$("statusFilter").value;
+  const filtered=events.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).filter(e=>{
+    const text=`${e.name} ${e.type} ${e.place}`.toLowerCase();
+    return (!q||text.includes(q)) && (filter==="all"||statusOf(e)===filter);
   });
-  const box = $("eventsList");
-  if(!filtered.length){ box.innerHTML = `<div class="empty">Nessun evento presente.<br>Premi <strong>+ Nuovo evento</strong> per iniziare.</div>`; return; }
-  box.innerHTML = filtered.map(e=>{
+  if(!filtered.length){$("eventsList").innerHTML=`<div class="empty">Nessun evento presente.<br>Premi <strong>+ Nuovo evento</strong> per iniziare.</div>`;return;}
+  $("eventsList").innerHTML=filtered.map(e=>{
     const av=(e.available||[]).length, as=(e.assigned||[]).length, st=statusOf(e);
+    const coverage=Math.min(100,(av/Math.max(1,Number(e.required)))*100);
     return `<article class="event-card">
-      <div class="event-main"><div class="eyebrow">${e.type}</div><h3>${escapeHtml(e.name)}</h3><div class="muted">${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+escapeHtml(e.place):""}</div></div>
-      <div class="metric"><strong>${e.required}</strong><span>richiesti</span></div>
-      <div class="metric availability-metric ${av>=Number(e.required)?"covered":"not-covered"}">
-        <strong>${av}/${e.required}</strong><span>disponibilità</span>
-        <div class="coverage-bar"><div class="coverage-fill" style="width:${Math.min(100, (av/Math.max(1,Number(e.required)))*100)}%"></div></div>
+      <div class="event-main"><div class="eyebrow">${escapeHtml(e.type)}</div><h3>${escapeHtml(e.name)}</h3>
+      <div class="muted">${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+escapeHtml(e.place):""}</div></div>
+      <div class="event-stats">
+        <div class="metric"><strong>${e.required}</strong><span>richiesti</span></div>
+        <div class="metric availability-metric ${av>=Number(e.required)?"covered":"not-covered"}"><strong>${av}/${e.required}</strong><span>disponibili</span>
+          <div class="coverage-bar"><div class="coverage-fill" style="width:${coverage}%"></div></div></div>
+        <div class="metric"><strong>${as}</strong><span>designati</span></div>
       </div>
-      <div class="metric"><strong>${as}</strong><span>designati</span></div>
-      <div><span class="badge ${st}">${statusLabel(st)}</span><br>
-      <button class="small-btn" style="margin-top:8px" onclick="openDetail('${e.id}')">Gestisci</button>
-      <button class="small-btn" style="margin-top:8px" onclick="duplicateEvent('${e.id}')">Duplica</button>
-    </div>
+      <div class="event-actions"><span class="badge ${st}">${statusLabel(st)}</span>
+        <div class="action-row"><button class="small-btn" onclick="openDetail('${e.id}')">Gestisci</button><button class="small-btn" onclick="duplicateEvent('${e.id}')">Duplica</button></div>
+      </div>
     </article>`;
   }).join("");
 }
@@ -161,6 +158,8 @@ function openDetail(id){
   activeEventId=id;
   const e=events.find(x=>x.id===id);
   tempAvailable=new Set(e.available||[]);
+  tempAvailability=new Map(Object.entries(e.availabilityTimes||{}).map(([id,v])=>[String(id),{mode:v?.mode||"full",start:v?.start||e.startTime||"",end:v?.end||e.endTime||""}]));
+  [...tempAvailable].forEach(id=>{if(!tempAvailability.has(String(id))) tempAvailability.set(String(id),{mode:"full",start:e.startTime||"",end:e.endTime||""});});
   tempAssigned=new Set(e.assigned||[]);
   tempCustomArbiters=[...(e.manualArbiters||[])];
   $("detailType").textContent=e.type;
@@ -192,34 +191,53 @@ function renderDetail(){
   renderAssigned();
 }
 
-function currentArbiters(){
-  const custom=tempCustomArbiters.map(a=>({id:a.id,nome:a.nome,cognome:"",custom:true}));
-  return [...ARBITRI,...custom];
-}
+function availabilityFor(id){return tempAvailability.get(String(id))||{mode:"full",start:"",end:""};}
+function availabilityLabel(id){const a=availabilityFor(id);return a.mode==="partial"&&a.start&&a.end?`${a.start}–${a.end}`:"Tutto l'evento";}
 function renderArbiters(){
   const q=$("arbiterSearch").value.trim().toLowerCase();
   const matches=currentArbiters().filter(a=>fullName(a).toLowerCase().includes(q)).slice(0,40);
   $("arbiterResults").innerHTML=matches.map(a=>{
-    const selected=tempAvailable.has(a.id);
+    const selected=tempAvailable.has(a.id), av=availabilityFor(a.id);
     return `<div class="arbiter-item ${selected?"selected":""}">
-      <span class="arbiter-name">${escapeHtml(fullName(a))}${a.custom?' <span class="hint">(inserito manualmente)</span>':''}</span>
+      <div class="arbiter-main"><span class="arbiter-name">${escapeHtml(fullName(a))}${a.custom?' <span class="hint">(inserito manualmente)</span>':''}</span>
+      ${selected?`<div class="availability-controls">
+        <select class="availability-mode" onchange="setAvailabilityMode('${a.id}',this.value)">
+          <option value="full" ${av.mode==="full"?"selected":""}>Tutto l'evento</option>
+          <option value="partial" ${av.mode==="partial"?"selected":""}>Solo fascia oraria</option>
+        </select>
+        ${av.mode==="partial"?`<div class="time-range">
+          <input type="time" value="${escapeHtml(av.start)}" onchange="setAvailabilityTime('${a.id}','start',this.value)">
+          <span>→</span>
+          <input type="time" value="${escapeHtml(av.end)}" onchange="setAvailabilityTime('${a.id}','end',this.value)">
+        </div>`:""}</div>`:""}</div>
       <div class="arbiter-actions"><button class="small-btn ${selected?"on":""}" onclick="toggleAvailable('${a.id}')">${selected?"Disponibile":"Aggiungi"}</button></div>
     </div>`;
-  }).join("") || `<div class="empty">Nessun arbitro trovato.</div>`;
+  }).join("")||`<div class="empty">Nessun arbitro trovato.</div>`;
 }
-
 function renderAssigned(){
   const q=$("assignmentSearch").value.trim().toLowerCase();
-  const available=currentArbiters().filter(a=>tempAvailable.has(a.id) && fullName(a).toLowerCase().includes(q));
-  $("assignedList").innerHTML=available.length ? available.map(a=>{
+  const available=currentArbiters().filter(a=>tempAvailable.has(a.id)&&fullName(a).toLowerCase().includes(q));
+  $("assignedList").innerHTML=available.length?available.map(a=>{
     const checked=tempAssigned.has(a.id);
-    return `<div class="assigned-item"><label><input type="checkbox" ${checked?"checked":""} onchange="toggleAssigned('${a.id}')">${escapeHtml(fullName(a))}</label><span class="badge ${checked?"complete":"partial"}">${checked?"DESIGNATO":"Disponibile"}</span></div>`;
-  }).join("") : `<div class="empty">${tempAvailable.size ? "Nessun arbitro disponibile corrisponde alla ricerca." : "Seleziona prima almeno un arbitro nella scheda Disponibilità."}</div>`;
+    return `<div class="assigned-item"><label class="assigned-check"><input type="checkbox" ${checked?"checked":""} onchange="toggleAssigned('${a.id}')"><span>${escapeHtml(fullName(a))}</span></label>
+      <div class="assigned-meta"><span class="availability-pill">${escapeHtml(availabilityLabel(a.id))}</span><span class="badge ${checked?"complete":"partial"}">${checked?"DESIGNATO":"Disponibile"}</span></div></div>`;
+  }).join(""):`<div class="empty">${tempAvailable.size?"Nessun arbitro disponibile corrisponde alla ricerca.":"Seleziona prima almeno un arbitro nella scheda Disponibilità."}</div>`;
 }
 
 window.toggleAvailable=id=>{
-  if(tempAvailable.has(id)){ tempAvailable.delete(id); tempAssigned.delete(id); }
-  else tempAvailable.add(id);
+  const key=String(id);
+  if(tempAvailable.has(key)){tempAvailable.delete(key);tempAvailability.delete(key);tempAssigned.delete(key);}
+  else{const e=events.find(x=>x.id===activeEventId);tempAvailable.add(key);tempAvailability.set(key,{mode:"full",start:e?.startTime||"",end:e?.endTime||""});}
+  renderDetail();
+};
+window.setAvailabilityMode=(id,mode)=>{
+  const key=String(id), e=events.find(x=>x.id===activeEventId), c=availabilityFor(key);
+  tempAvailability.set(key,{mode,start:mode==="partial"?(c.start||e?.startTime||""):(e?.startTime||c.start||""),end:mode==="partial"?(c.end||e?.endTime||""):(e?.endTime||c.end||"")});
+  renderDetail();
+};
+window.setAvailabilityTime=(id,field,value)=>{
+  const key=String(id), c=availabilityFor(key);
+  tempAvailability.set(key,{...c,mode:"partial",[field]:value});
   renderDetail();
 };
 window.toggleAssigned=id=>{
@@ -239,7 +257,7 @@ document.querySelectorAll(".tab").forEach(tab=>{
     if(view==="assignments") renderAssigned();
   };
 });
-$("clearAvailabilityBtn").onclick=()=>{ tempAvailable.clear(); tempAssigned.clear(); renderDetail(); };
+$("clearAvailabilityBtn").onclick=()=>{ tempAvailable.clear(); tempAvailability.clear(); tempAssigned.clear(); renderDetail(); };
 $("closeDetailBtn").onclick=()=>$("detailModal").classList.add("hidden");
 $("addManualArbiterBtn").onclick=()=>{
   const name=$("manualArbiterName").value.trim().replace(/\s+/g," ");
@@ -267,12 +285,14 @@ $("saveDetailBtn").onclick=async ()=>{
       eventId:e.id,
       available:JSON.stringify([...tempAvailable]),
       assigned:JSON.stringify([...tempAssigned]),
-      manual:JSON.stringify(tempCustomArbiters)
+      manual:JSON.stringify(tempCustomArbiters),
+      availabilityTimes:JSON.stringify(Object.fromEntries(tempAvailability))
     });
 
     e.available=[...tempAvailable];
     e.assigned=[...tempAssigned];
     e.manualArbiters=[...tempCustomArbiters];
+    e.availabilityTimes=Object.fromEntries(tempAvailability);
 
     $("detailModal").classList.add("hidden");
     renderEvents();
