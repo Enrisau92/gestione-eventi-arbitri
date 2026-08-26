@@ -91,7 +91,11 @@
           <input id="arbiterSearch" type="search" placeholder="🔍 Cerca nome o cognome…">
           <button class="ghost" id="clearAvailabilityBtn">Azzera selezioni</button>
         </div>
-        <div class="hint-block">Cerca un arbitro e premi <strong>Aggiungi</strong>. Gli arbitri selezionati sono considerati disponibili.</div>
+        <div class="manual-row">
+          <input id="manualArbiterName" type="text" placeholder="Nome e cognome non presenti nell'elenco…">
+          <button class="ghost" id="addManualArbiterBtn">+ Aggiungi nome</button>
+        </div>
+        <div class="hint-block">Cerca un arbitro e premi <strong>Aggiungi</strong>. Se non è nell'elenco, puoi inserirlo manualmente.</div>
         <div id="arbiterResults" class="arbiter-list"></div>
       </section>
 

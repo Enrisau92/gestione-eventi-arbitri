@@ -3,6 +3,7 @@ let events = loadEvents();
 let activeEventId = null;
 let tempAvailable = new Set();
 let tempAssigned = new Set();
+let tempCustomArbiters = [];
 
 const $ = id => document.getElementById(id);
 const fullName = a => `${a.nome} ${a.cognome}`;
@@ -44,11 +45,30 @@ function renderEvents(){
       <div class="metric"><strong>${e.required}</strong><span>richiesti</span></div>
       <div class="metric"><strong>${av}</strong><span>disponibili</span></div>
       <div class="metric"><strong>${as}</strong><span>designati</span></div>
-      <div><span class="badge ${st}">${statusLabel(st)}</span><br><button class="small-btn" style="margin-top:8px" onclick="openDetail('${e.id}')">Gestisci</button></div>
+      <div><span class="badge ${st}">${statusLabel(st)}</span><br>
+      <button class="small-btn" style="margin-top:8px" onclick="openDetail('${e.id}')">Gestisci</button>
+      <button class="small-btn" style="margin-top:8px" onclick="duplicateEvent('${e.id}')">Duplica</button>
+    </div>
     </article>`;
   }).join("");
 }
 function escapeHtml(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m])); }
+
+window.duplicateEvent=id=>{
+  const original=events.find(x=>x.id===id);
+  if(!original) return;
+  const copy={
+    ...original,
+    id:uid(),
+    name:original.name,
+    available:[],
+    assigned:[],
+    manualArbiters:[],
+  };
+  events.push(copy);
+  saveEvents();
+  openEventForm(copy);
+};
 
 function openEventForm(e=null){
   $("modalTitle").textContent=e?"Modifica evento":"Nuovo evento";
@@ -72,7 +92,7 @@ $("eventForm").onsubmit=e=>{
   e.preventDefault();
   const id=$("eventId").value||uid();
   const existing=events.find(x=>x.id===id);
-  const obj={id,date:$("eventDate").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,type:$("eventType").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,required:Number($("eventRequired").value),name:$("eventName").value.trim(),place:$("eventPlace").value.trim(),notes:$("eventNotes").value.trim(),available:existing?.available||[],assigned:existing?.assigned||[]};
+  const obj={id,date:$("eventDate").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,type:$("eventType").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,required:Number($("eventRequired").value),name:$("eventName").value.trim(),place:$("eventPlace").value.trim(),notes:$("eventNotes").value.trim(),available:existing?.available||[],assigned:existing?.assigned||[],manualArbiters:existing?.manualArbiters||[]};
   if(existing) Object.assign(existing,obj); else events.push(obj);
   saveEvents(); closeEventForm(); renderEvents();
 };
@@ -82,6 +102,7 @@ function openDetail(id){
   const e=events.find(x=>x.id===id);
   tempAvailable=new Set(e.available||[]);
   tempAssigned=new Set(e.assigned||[]);
+  tempCustomArbiters=[...(e.manualArbiters||[])];
   $("detailType").textContent=e.type;
   $("detailTitle").textContent=e.name;
   $("detailMeta").textContent=`${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+e.place:""}`;
@@ -105,13 +126,17 @@ function renderDetail(){
   renderAssigned();
 }
 
+function currentArbiters(){
+  const custom=tempCustomArbiters.map(a=>({id:a.id,nome:a.nome,cognome:"",custom:true}));
+  return [...ARBITRI,...custom];
+}
 function renderArbiters(){
   const q=$("arbiterSearch").value.trim().toLowerCase();
-  const matches=ARBITRI.filter(a=>fullName(a).toLowerCase().includes(q)).slice(0,40);
+  const matches=currentArbiters().filter(a=>fullName(a).toLowerCase().includes(q)).slice(0,40);
   $("arbiterResults").innerHTML=matches.map(a=>{
     const selected=tempAvailable.has(a.id);
     return `<div class="arbiter-item ${selected?"selected":""}">
-      <span class="arbiter-name">${escapeHtml(fullName(a))}</span>
+      <span class="arbiter-name">${escapeHtml(fullName(a))}${a.custom?' <span class="hint">(inserito manualmente)</span>':''}</span>
       <div class="arbiter-actions"><button class="small-btn ${selected?"on":""}" onclick="toggleAvailable('${a.id}')">${selected?"Disponibile":"Aggiungi"}</button></div>
     </div>`;
   }).join("") || `<div class="empty">Nessun arbitro trovato.</div>`;
@@ -119,7 +144,7 @@ function renderArbiters(){
 
 function renderAssigned(){
   const q=$("assignmentSearch").value.trim().toLowerCase();
-  const available=ARBITRI.filter(a=>tempAvailable.has(a.id) && fullName(a).toLowerCase().includes(q));
+  const available=currentArbiters().filter(a=>tempAvailable.has(a.id) && fullName(a).toLowerCase().includes(q));
   $("assignedList").innerHTML=available.length ? available.map(a=>{
     const checked=tempAssigned.has(a.id);
     return `<div class="assigned-item"><label><input type="checkbox" ${checked?"checked":""} onchange="toggleAssigned('${a.id}')">${escapeHtml(fullName(a))}</label><span class="badge ${checked?"complete":"partial"}">${checked?"DESIGNATO":"Disponibile"}</span></div>`;
@@ -150,9 +175,23 @@ document.querySelectorAll(".tab").forEach(tab=>{
 });
 $("clearAvailabilityBtn").onclick=()=>{ tempAvailable.clear(); tempAssigned.clear(); renderDetail(); };
 $("closeDetailBtn").onclick=()=>$("detailModal").classList.add("hidden");
+$("addManualArbiterBtn").onclick=()=>{
+  const name=$("manualArbiterName").value.trim().replace(/\s+/g," ");
+  if(!name) return;
+  const id="manual_"+uid();
+  tempCustomArbiters.push({id,nome:name});
+  tempAvailable.add(id);
+  $("manualArbiterName").value="";
+  renderDetail();
+};
+
+$("manualArbiterName").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){e.preventDefault();$("addManualArbiterBtn").click();}
+});
+
 $("saveDetailBtn").onclick=()=>{
   const e=events.find(x=>x.id===activeEventId);
-  e.available=[...tempAvailable]; e.assigned=[...tempAssigned];
+  e.available=[...tempAvailable]; e.assigned=[...tempAssigned]; e.manualArbiters=[...tempCustomArbiters];
   saveEvents(); $("detailModal").classList.add("hidden"); renderEvents();
 };
 $("deleteEventBtn").onclick=()=>{
