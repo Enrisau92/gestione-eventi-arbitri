@@ -43,7 +43,10 @@ function renderEvents(){
     return `<article class="event-card">
       <div class="event-main"><div class="eyebrow">${e.type}</div><h3>${escapeHtml(e.name)}</h3><div class="muted">${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+escapeHtml(e.place):""}</div></div>
       <div class="metric"><strong>${e.required}</strong><span>richiesti</span></div>
-      <div class="metric"><strong>${av}</strong><span>disponibili</span></div>
+      <div class="metric availability-metric ${av>=Number(e.required)?"covered":"not-covered"}">
+        <strong>${av}/${e.required}</strong><span>disponibilità</span>
+        <div class="coverage-bar"><div class="coverage-fill" style="width:${Math.min(100, (av/Math.max(1,Number(e.required)))*100)}%"></div></div>
+      </div>
       <div class="metric"><strong>${as}</strong><span>designati</span></div>
       <div><span class="badge ${st}">${statusLabel(st)}</span><br>
       <button class="small-btn" style="margin-top:8px" onclick="openDetail('${e.id}')">Gestisci</button>
@@ -120,6 +123,12 @@ function renderDetail(){
   $("detailRequired").textContent=e.required;
   $("detailAvailable").textContent=tempAvailable.size;
   $("detailAssigned").textContent=tempAssigned.size;
+  const coverage=Math.min(100,(tempAvailable.size/Math.max(1,Number(e.required)))*100);
+  $("detailCoverageFill").style.width=coverage+"%";
+  const covered=tempAvailable.size>=Number(e.required);
+  $("detailCoverageLabel").textContent=covered
+    ? "✓ Numero di disponibili sufficiente"
+    : `Mancano ${Number(e.required)-tempAvailable.size} disponibilità`;
   $("availabilityTabCount").textContent=tempAvailable.size;
   $("assignmentTabCount").textContent=tempAssigned.size;
   renderArbiters();
