@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gestione Eventi Arbitri</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <div class="eyebrow">Commissione Arbitri</div>
+      <h1>Gestione Eventi</h1>
+    </div>
+    <button class="primary" id="newEventBtn">+ Nuovo evento</button>
+  </header>
+
+  <main class="container">
+    <section class="toolbar">
+      <input id="eventSearch" type="search" placeholder="Cerca evento, tipologia o luogo…">
+      <select id="statusFilter">
+        <option value="all">Tutti gli stati</option>
+        <option value="complete">Completi</option>
+        <option value="partial">Da completare</option>
+        <option value="none">Nessun designato</option>
+      </select>
+    </section>
+
+    <section id="eventsList" class="events"></section>
+  </main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="modalTitle">Nuovo evento</h2>
+        <button class="icon" id="closeModalBtn" aria-label="Chiudi">×</button>
+      </div>
+
+      <form id="eventForm">
+        <input type="hidden" id="eventId">
+        <div class="grid2">
+          <label>Data<input id="eventDate" type="date" required></label>
+          <label>Ora<input id="eventTime" type="time"></label>
+          <label>Tipologia
+            <select id="eventType" required>
+              <option value="Torneo non ufficiale">Torneo non ufficiale</option>
+              <option value="Allenamento congiunto">Allenamento congiunto</option>
+              <option value="Amichevole">Amichevole</option>
+              <option value="Altro">Altro</option>
+            </select>
+          </label>
+          <label>Arbitri richiesti<input id="eventRequired" type="number" min="1" value="2" required></label>
+        </div>
+        <label>Evento / squadre<input id="eventName" type="text" placeholder="Es. Torneo XYZ" required></label>
+        <label>Luogo<input id="eventPlace" type="text" placeholder="Es. Ravenna"></label>
+        <label>Note<textarea id="eventNotes" rows="2" placeholder="Eventuali informazioni utili"></textarea></label>
+        <div class="form-actions">
+          <button type="button" class="ghost" id="cancelBtn">Annulla</button>
+          <button type="submit" class="primary">Salva evento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="detailModal" class="modal hidden">
+    <div class="modal-card large">
+      <div class="modal-head">
+        <div>
+          <div class="eyebrow" id="detailType"></div>
+          <h2 id="detailTitle"></h2>
+          <div class="muted" id="detailMeta"></div>
+        </div>
+        <button class="icon" id="closeDetailBtn" aria-label="Chiudi">×</button>
+      </div>
+
+      <div class="detail-summary">
+        <div><strong id="detailRequired">0</strong><span>richiesti</span></div>
+        <div><strong id="detailAvailable">0</strong><span>disponibili</span></div>
+        <div><strong id="detailAssigned">0</strong><span>designati</span></div>
+      </div>
+
+      <div class="section-title">Disponibilità</div>
+      <div class="search-row">
+        <input id="arbiterSearch" type="search" placeholder="🔍 Cerca nome o cognome…">
+        <button class="ghost" id="clearAvailabilityBtn">Azzera selezioni</button>
+      </div>
+      <div id="arbiterResults" class="arbiter-list"></div>
+
+      <div class="section-title">Designazioni <span class="hint">Seleziona solo tra i disponibili</span></div>
+      <div id="assignedList" class="assigned-list"></div>
+
+      <div class="form-actions">
+        <button type="button" class="danger ghost" id="deleteEventBtn">Elimina evento</button>
+        <button type="button" class="primary" id="saveDetailBtn">Salva disponibilità e designazioni</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="arbitri.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
