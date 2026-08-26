@@ -40,7 +40,8 @@
         <input type="hidden" id="eventId">
         <div class="grid2">
           <label>Data<input id="eventDate" type="date" required></label>
-          <label>Ora<input id="eventTime" type="time"></label>
+          <label>Ora inizio<input id="eventStartTime" type="time" required></label>
+          <label>Ora fine<input id="eventEndTime" type="time" required></label>
           <label>Tipologia
             <select id="eventType" required>
               <option value="Torneo non ufficiale">Torneo non ufficiale</option>
@@ -79,15 +80,28 @@
         <div><strong id="detailAssigned">0</strong><span>designati</span></div>
       </div>
 
-      <div class="section-title">Disponibilità</div>
-      <div class="search-row">
-        <input id="arbiterSearch" type="search" placeholder="🔍 Cerca nome o cognome…">
-        <button class="ghost" id="clearAvailabilityBtn">Azzera selezioni</button>
+      <div class="tabs">
+        <button class="tab active" data-tab="availability">Disponibilità <span id="availabilityTabCount">0</span></button>
+        <button class="tab" data-tab="assignments">Designazioni <span id="assignmentTabCount">0</span></button>
       </div>
-      <div id="arbiterResults" class="arbiter-list"></div>
 
-      <div class="section-title">Designazioni <span class="hint">Seleziona solo tra i disponibili</span></div>
-      <div id="assignedList" class="assigned-list"></div>
+      <section id="availabilityView" class="tab-view">
+        <div class="section-title">Seleziona gli arbitri disponibili</div>
+        <div class="search-row">
+          <input id="arbiterSearch" type="search" placeholder="🔍 Cerca nome o cognome…">
+          <button class="ghost" id="clearAvailabilityBtn">Azzera selezioni</button>
+        </div>
+        <div class="hint-block">Cerca un arbitro e premi <strong>Aggiungi</strong>. Gli arbitri selezionati sono considerati disponibili.</div>
+        <div id="arbiterResults" class="arbiter-list"></div>
+      </section>
+
+      <section id="assignmentsView" class="tab-view hidden">
+        <div class="section-title">Scegli i designati <span class="hint">Solo tra gli arbitri disponibili</span></div>
+        <div class="search-row">
+          <input id="assignmentSearch" type="search" placeholder="🔍 Cerca tra i disponibili…">
+        </div>
+        <div id="assignedList" class="assigned-list"></div>
+      </section>
 
       <div class="form-actions">
         <button type="button" class="danger ghost" id="deleteEventBtn">Elimina evento</button>

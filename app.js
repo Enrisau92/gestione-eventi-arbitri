@@ -40,7 +40,7 @@ function renderEvents(){
   box.innerHTML = filtered.map(e=>{
     const av=(e.available||[]).length, as=(e.assigned||[]).length, st=statusOf(e);
     return `<article class="event-card">
-      <div class="event-main"><div class="eyebrow">${e.type}</div><h3>${escapeHtml(e.name)}</h3><div class="muted">${formatDate(e.date)}${e.time?" · "+e.time:""}${e.place?" · "+escapeHtml(e.place):""}</div></div>
+      <div class="event-main"><div class="eyebrow">${e.type}</div><h3>${escapeHtml(e.name)}</h3><div class="muted">${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+escapeHtml(e.place):""}</div></div>
       <div class="metric"><strong>${e.required}</strong><span>richiesti</span></div>
       <div class="metric"><strong>${av}</strong><span>disponibili</span></div>
       <div class="metric"><strong>${as}</strong><span>designati</span></div>
@@ -54,7 +54,8 @@ function openEventForm(e=null){
   $("modalTitle").textContent=e?"Modifica evento":"Nuovo evento";
   $("eventId").value=e?.id||"";
   $("eventDate").value=e?.date||new Date().toISOString().slice(0,10);
-  $("eventTime").value=e?.time||"";
+  $("eventStartTime").value=e?.startTime||"";
+  $("eventEndTime").value=e?.endTime||"";
   $("eventType").value=e?.type||"Torneo non ufficiale";
   $("eventRequired").value=e?.required||2;
   $("eventName").value=e?.name||"";
@@ -71,7 +72,7 @@ $("eventForm").onsubmit=e=>{
   e.preventDefault();
   const id=$("eventId").value||uid();
   const existing=events.find(x=>x.id===id);
-  const obj={id,date:$("eventDate").value,time:$("eventTime").value,type:$("eventType").value,required:Number($("eventRequired").value),name:$("eventName").value.trim(),place:$("eventPlace").value.trim(),notes:$("eventNotes").value.trim(),available:existing?.available||[],assigned:existing?.assigned||[]};
+  const obj={id,date:$("eventDate").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,type:$("eventType").value,startTime:$("eventStartTime").value,endTime:$("eventEndTime").value,required:Number($("eventRequired").value),name:$("eventName").value.trim(),place:$("eventPlace").value.trim(),notes:$("eventNotes").value.trim(),available:existing?.available||[],assigned:existing?.assigned||[]};
   if(existing) Object.assign(existing,obj); else events.push(obj);
   saveEvents(); closeEventForm(); renderEvents();
 };
@@ -83,8 +84,13 @@ function openDetail(id){
   tempAssigned=new Set(e.assigned||[]);
   $("detailType").textContent=e.type;
   $("detailTitle").textContent=e.name;
-  $("detailMeta").textContent=`${formatDate(e.date)}${e.time?" · "+e.time:""}${e.place?" · "+e.place:""}`;
+  $("detailMeta").textContent=`${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+e.place:""}`;
   $("arbiterSearch").value="";
+  $("assignmentSearch").value="";
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.querySelector('.tab[data-tab="availability"]').classList.add("active");
+  $("availabilityView").classList.remove("hidden");
+  $("assignmentsView").classList.add("hidden");
   renderDetail();
   $("detailModal").classList.remove("hidden");
 }
@@ -93,9 +99,12 @@ function renderDetail(){
   $("detailRequired").textContent=e.required;
   $("detailAvailable").textContent=tempAvailable.size;
   $("detailAssigned").textContent=tempAssigned.size;
+  $("availabilityTabCount").textContent=tempAvailable.size;
+  $("assignmentTabCount").textContent=tempAssigned.size;
   renderArbiters();
   renderAssigned();
 }
+
 function renderArbiters(){
   const q=$("arbiterSearch").value.trim().toLowerCase();
   const matches=ARBITRI.filter(a=>fullName(a).toLowerCase().includes(q)).slice(0,40);
@@ -107,13 +116,16 @@ function renderArbiters(){
     </div>`;
   }).join("") || `<div class="empty">Nessun arbitro trovato.</div>`;
 }
+
 function renderAssigned(){
-  const available=ARBITRI.filter(a=>tempAvailable.has(a.id));
+  const q=$("assignmentSearch").value.trim().toLowerCase();
+  const available=ARBITRI.filter(a=>tempAvailable.has(a.id) && fullName(a).toLowerCase().includes(q));
   $("assignedList").innerHTML=available.length ? available.map(a=>{
     const checked=tempAssigned.has(a.id);
     return `<div class="assigned-item"><label><input type="checkbox" ${checked?"checked":""} onchange="toggleAssigned('${a.id}')">${escapeHtml(fullName(a))}</label><span class="badge ${checked?"complete":"partial"}">${checked?"DESIGNATO":"Disponibile"}</span></div>`;
-  }).join("") : `<div class="empty">Seleziona prima almeno un arbitro disponibile.</div>`;
+  }).join("") : `<div class="empty">${tempAvailable.size ? "Nessun arbitro disponibile corrisponde alla ricerca." : "Seleziona prima almeno un arbitro nella scheda Disponibilità."}</div>`;
 }
+
 window.toggleAvailable=id=>{
   if(tempAvailable.has(id)){ tempAvailable.delete(id); tempAssigned.delete(id); }
   else tempAvailable.add(id);
@@ -124,6 +136,18 @@ window.toggleAssigned=id=>{
   renderDetail();
 };
 $("arbiterSearch").oninput=renderArbiters;
+$("assignmentSearch").oninput=renderAssigned;
+
+document.querySelectorAll(".tab").forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+    tab.classList.add("active");
+    const view=tab.dataset.tab;
+    $("availabilityView").classList.toggle("hidden",view!=="availability");
+    $("assignmentsView").classList.toggle("hidden",view!=="assignments");
+    if(view==="assignments") renderAssigned();
+  };
+});
 $("clearAvailabilityBtn").onclick=()=>{ tempAvailable.clear(); tempAssigned.clear(); renderDetail(); };
 $("closeDetailBtn").onclick=()=>$("detailModal").classList.add("hidden");
 $("saveDetailBtn").onclick=()=>{
