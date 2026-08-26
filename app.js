@@ -191,6 +191,10 @@ function renderDetail(){
   renderAssigned();
 }
 
+function currentArbiters(){
+  const custom=tempCustomArbiters.map(a=>({id:a.id,nome:a.nome,cognome:"",custom:true}));
+  return [...ARBITRI,...custom];
+}
 function availabilityFor(id){return tempAvailability.get(String(id))||{mode:"full",start:"",end:""};}
 function availabilityLabel(id){const a=availabilityFor(id);return a.mode==="partial"&&a.start&&a.end?`${a.start}–${a.end}`:"Tutto l'evento";}
 function renderArbiters(){
