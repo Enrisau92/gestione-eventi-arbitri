@@ -59,83 +59,73 @@ async function migrateLegacyDataIfNeeded(){
 
   if(!Array.isArray(legacy) || legacy.length===0) return;
 
-  // Il database è vuoto: proponiamo una migrazione sicura dei dati
-  // presenti nel browser usato finora.
-  if(events.length>0){
-    alert(
-      `Ho trovato ${legacy.length} eventi salvati nella vecchia versione, `+
-      `ma il database condiviso contiene già ${events.length} eventi. `+
-      `Per evitare duplicati non li importo automaticamente.`
-    );
-    return;
-  }
-
   const ok=confirm(
-    `Ho trovato ${legacy.length} eventi inseriti nella versione precedente.\\n\\n`+
-    `Vuoi importarli nel nuovo database condiviso?\\n\\n`+
-    `Le disponibilità e le designazioni verranno mantenute.`
+    `Ho trovato ${legacy.length} eventi nella versione precedente.\\n\\n`+
+    `Il nuovo database contiene già ${events.length} eventi.\\n\\n`+
+    `Vuoi completare il trasferimento delle disponibilità e delle designazioni?\\n\\n`+
+    `Gli eventi già presenti non verranno duplicati.`
   );
-
   if(!ok) return;
 
   const originalText=$("eventsList").innerHTML;
   $("eventsList").innerHTML=
     `<div class="empty"><strong>Importazione in corso…</strong><br>`+
-    `Sto trasferendo gli eventi nel database condiviso.</div>`;
+    `Sto trasferendo disponibilità e designazioni nel database condiviso.</div>`;
 
   try{
-    for(const event of legacy){
-      const migrated={
-        ...event,
-        id:event.id || uid(),
-        available:Array.isArray(event.available)?event.available:[],
-        assigned:Array.isArray(event.assigned)?event.assigned:[],
-        manualArbiters:Array.isArray(event.manualArbiters)?event.manualArbiters:[]
+    const serverIds=new Set(events.map(e=>String(e.id)));
+
+    for(const legacyEvent of legacy){
+      const event={
+        ...legacyEvent,
+        id:legacyEvent.id || uid(),
+        available:Array.isArray(legacyEvent.available)?legacyEvent.available:[],
+        assigned:Array.isArray(legacyEvent.assigned)?legacyEvent.assigned:[],
+        manualArbiters:Array.isArray(legacyEvent.manualArbiters)?legacyEvent.manualArbiters:[]
       };
 
-      await apiGet({
-        action:"saveEvent",
-        event:JSON.stringify(migrated)
-      });
-
-      const records = [];
-      const ids=[...new Set([
-        ...migrated.available,
-        ...migrated.assigned,
-        ...migrated.manualArbiters.map(a=>a.id)
-      ])];
+      // Se l'evento non è ancora nel server, lo creiamo.
+      if(!serverIds.has(String(event.id))){
+        await apiGet({
+          action:"saveEvent",
+          event:JSON.stringify(event)
+        });
+        serverIds.add(String(event.id));
+      }
 
       const manualMap={};
-      migrated.manualArbiters.forEach(a=>{
+      event.manualArbiters.forEach(a=>{
         manualMap[String(a.id)]=String(a.nome||"");
       });
 
-      ids.forEach(id=>{
-        records.push({
-          id:String(id),
+      const ids=[...new Set([
+        ...event.available,
+        ...event.assigned,
+        ...event.manualArbiters.map(a=>String(a.id))
+      ])];
+
+      // Un record alla volta: evita URL troppo lunghi quando ci sono molti arbitri.
+      for(const id of ids){
+        await apiGet({
+          action:"saveParticipant",
+          eventId:String(event.id),
+          arbiterId:String(id),
           name:manualMap[String(id)]||"",
-          available:migrated.available.includes(id),
-          assigned:migrated.assigned.includes(id),
-          manual:Object.prototype.hasOwnProperty.call(manualMap,String(id))
+          available:event.available.includes(id) ? "true" : "false",
+          assigned:event.assigned.includes(id) ? "true" : "false",
+          manual:Object.prototype.hasOwnProperty.call(manualMap,String(id)) ? "true" : "false"
         });
-      });
-
-      await apiGet({
-        action:"saveParticipants",
-        eventId:migrated.id,
-        available:JSON.stringify(migrated.available),
-        assigned:JSON.stringify(migrated.assigned),
-        manual:JSON.stringify(migrated.manualArbiters)
-      });
+      }
     }
-
-    localStorage.removeItem(LEGACY_KEY);
 
     const data=await apiGet({action:"get"});
     events=Array.isArray(data.events)?data.events:[];
     renderEvents();
 
-    alert(`Importazione completata: ${events.length} eventi ora sono nel database condiviso.`);
+    // Solo ora consideriamo completata la migrazione.
+    localStorage.removeItem(LEGACY_KEY);
+
+    alert(`Importazione completata: ${events.length} eventi sono ora nel database condiviso.`);
   }catch(err){
     console.error(err);
     $("eventsList").innerHTML=originalText;
