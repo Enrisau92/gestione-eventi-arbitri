@@ -191,10 +191,6 @@ function renderDetail(){
   renderAssigned();
 }
 
-function currentArbiters(){
-  const custom=tempCustomArbiters.map(a=>({id:a.id,nome:a.nome,cognome:"",custom:true}));
-  return [...ARBITRI,...custom];
-}
 function availabilityFor(id){return tempAvailability.get(String(id))||{mode:"full",start:"",end:""};}
 function availabilityLabel(id){const a=availabilityFor(id);return a.mode==="partial"&&a.start&&a.end?`${a.start}–${a.end}`:"Tutto l'evento";}
 function renderArbiters(){
@@ -220,34 +216,11 @@ function renderArbiters(){
 }
 function renderAssigned(){
   const q=$("assignmentSearch").value.trim().toLowerCase();
-
-  // La vista Designazioni deve partire dall'elenco delle DISPONIBILITÀ
-  // salvate per l'evento, non dal solo elenco anagrafico degli arbitri.
-  // In questo modo anche un arbitro manuale o un ID non più presente
-  // nell'elenco principale resta visibile.
-  const all=currentArbiters();
-  const byId=new Map(all.map(a=>[String(a.id),a]));
-
-  const available=[...tempAvailable]
-    .map(id=>{
-      const key=String(id);
-      const a=byId.get(key);
-      return a || {id:key,nome:key,cognome:"",custom:true};
-    })
-    .filter(a=>fullName(a).toLowerCase().includes(q));
-
+  const available=currentArbiters().filter(a=>tempAvailable.has(a.id)&&fullName(a).toLowerCase().includes(q));
   $("assignedList").innerHTML=available.length?available.map(a=>{
-    const checked=tempAssigned.has(String(a.id));
-    return `<div class="assigned-item">
-      <label class="assigned-check">
-        <input type="checkbox" ${checked?"checked":""} onchange="toggleAssigned('${escapeHtml(String(a.id))}')">
-        <span>${escapeHtml(fullName(a))}</span>
-      </label>
-      <div class="assigned-meta">
-        <span class="availability-pill">${escapeHtml(availabilityLabel(a.id))}</span>
-        <span class="badge ${checked?"complete":"partial"}">${checked?"DESIGNATO":"Disponibile"}</span>
-      </div>
-    </div>`;
+    const checked=tempAssigned.has(a.id);
+    return `<div class="assigned-item"><label class="assigned-check"><input type="checkbox" ${checked?"checked":""} onchange="toggleAssigned('${a.id}')"><span>${escapeHtml(fullName(a))}</span></label>
+      <div class="assigned-meta"><span class="availability-pill">${escapeHtml(availabilityLabel(a.id))}</span><span class="badge ${checked?"complete":"partial"}">${checked?"DESIGNATO":"Disponibile"}</span></div></div>`;
   }).join(""):`<div class="empty">${tempAvailable.size?"Nessun arbitro disponibile corrisponde alla ricerca.":"Seleziona prima almeno un arbitro nella scheda Disponibilità."}</div>`;
 }
 
