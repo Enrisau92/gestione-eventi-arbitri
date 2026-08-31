@@ -7,7 +7,7 @@ let tempAssigned = new Set();
 let tempCustomArbiters = [];
 
 const $ = id => document.getElementById(id);
-const fullName = a => `${a.nome} ${a.cognome}`;
+const fullName = a => `${a?.nome || ""} ${a?.cognome || ""}`.trim();
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
@@ -57,15 +57,50 @@ function formatDate(d){
   const [y,m,day]=d.split("-");
   return `${day}/${m}/${y}`;
 }
+function eventDateTime(e,useEnd=false){
+  if(!e?.date) return null;
+  const time=useEnd?(e.endTime||e.startTime||"23:59"):(e.startTime||"00:00");
+  const d=new Date(`${e.date}T${time}:00`);
+  return Number.isNaN(d.getTime())?null:d;
+}
+function isFutureEvent(e){
+  const end=eventDateTime(e,true);
+  if(end) return end.getTime()>=Date.now();
+  return String(e.date||"")>=new Date().toISOString().slice(0,10);
+}
+function isPastEvent(e){return !isFutureEvent(e);}
+
 function renderEvents(){
-  const q=$("eventSearch").value.trim().toLowerCase(), filter=$("statusFilter").value;
-  const filtered=events.slice().sort((a,b)=>(a.date||"").localeCompare(b.date||"")).filter(e=>{
-    const text=`${e.name} ${e.type} ${e.place}`.toLowerCase();
-    return (!q||text.includes(q)) && (filter==="all"||statusOf(e)===filter);
+  const q=$("eventSearch").value.trim().toLowerCase();
+  const status=$("statusFilter").value;
+  const view=$("viewFilter").value;
+  const sort=$("sortFilter").value;
+
+  let filtered=events.slice();
+  if(view==="future") filtered=filtered.filter(isFutureEvent);
+  if(view==="past") filtered=filtered.filter(isPastEvent);
+
+  filtered=filtered.filter(e=>{
+    const text=`${e.name||""} ${e.type||""} ${e.place||""}`.toLowerCase();
+    return (!q||text.includes(q))&&(status==="all"||statusOf(e)===status);
   });
-  if(!filtered.length){$("eventsList").innerHTML=`<div class="empty">Nessun evento presente.<br>Premi <strong>+ Nuovo evento</strong> per iniziare.</div>`;return;}
+
+  filtered.sort((a,b)=>{
+    if(sort==="name") return String(a.name||"").localeCompare(String(b.name||""),"it");
+    const da=eventDateTime(a)?.getTime()??Number.MAX_SAFE_INTEGER;
+    const db=eventDateTime(b)?.getTime()??Number.MAX_SAFE_INTEGER;
+    return sort==="desc"?db-da:da-db;
+  });
+
+  if(!filtered.length){
+    $("eventsList").innerHTML=`<div class="empty">Nessun evento nella vista selezionata.</div>`;
+    return;
+  }
+
   $("eventsList").innerHTML=filtered.map(e=>{
-    const av=(e.available||[]).length, as=(e.assigned||[]).length, st=statusOf(e);
+    const av=new Set((e.available||[]).map(String)).size;
+    const as=new Set((e.assigned||[]).map(String)).size;
+    const st=statusOf({...e,assigned:[...new Set((e.assigned||[]).map(String))]});
     const coverage=Math.min(100,(av/Math.max(1,Number(e.required)))*100);
     return `<article class="event-card">
       <div class="event-main"><div class="eyebrow">${escapeHtml(e.type)}</div><h3>${escapeHtml(e.name)}</h3>
@@ -77,11 +112,12 @@ function renderEvents(){
         <div class="metric"><strong>${as}</strong><span>designati</span></div>
       </div>
       <div class="event-actions"><span class="badge ${st}">${statusLabel(st)}</span>
-        <div class="action-row"><button class="small-btn" onclick="openDetail('${e.id}')">Gestisci</button><button class="small-btn" onclick="duplicateEvent('${e.id}')">Duplica</button></div>
+        <div class="action-row"><button class="small-btn" onclick="openDetail('${escapeHtml(e.id)}')">Gestisci</button><button class="small-btn" onclick="duplicateEvent('${escapeHtml(e.id)}')">Duplica</button></div>
       </div>
     </article>`;
   }).join("");
 }
+
 function escapeHtml(s){ return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m])); }
 
 window.duplicateEvent=id=>{
@@ -94,6 +130,7 @@ window.duplicateEvent=id=>{
     available:[],
     assigned:[],
     manualArbiters:[],
+    availabilityTimes:{}
   };
   events.push(copy);
   renderEvents();
@@ -134,7 +171,8 @@ $("eventForm").onsubmit=async e=>{
     notes:$("eventNotes").value.trim(),
     available:existing?.available||[],
     assigned:existing?.assigned||[],
-    manualArbiters:existing?.manualArbiters||[]
+    manualArbiters:existing?.manualArbiters||[],
+    availabilityTimes:existing?.availabilityTimes||{}
   };
 
   const saveBtn=$("eventForm").querySelector('button[type="submit"]');
@@ -189,12 +227,6 @@ function renderDetail(){
   $("assignmentTabCount").textContent=tempAssigned.size;
   renderArbiters();
   renderAssigned();
-}
-
-function currentArbiters(){
-  const base = Array.isArray(window.ARBITRI) ? window.ARBITRI : (typeof ARBITRI !== "undefined" && Array.isArray(ARBITRI) ? ARBITRI : []);
-  const custom = tempCustomArbiters.map(a=>({id:a.id,nome:a.nome,cognome:"",custom:true}));
-  return [...base,...custom];
 }
 
 function availabilityFor(id){return tempAvailability.get(String(id))||{mode:"full",start:"",end:""};}
@@ -323,6 +355,199 @@ $("deleteEventBtn").onclick=async ()=>{
 };
 $("eventSearch").oninput=renderEvents;
 $("statusFilter").onchange=renderEvents;
+
+/* =========================================================
+   V9 — DISPONIBILITÀ PER ARBITRO
+========================================================= */
+
+let wideActiveArbiterId=null;
+let wideDraft={};
+
+function getAllArbitersForWideView(){
+  const base=Array.isArray(window.ARBITRI)?window.ARBITRI:
+    (typeof ARBITRI!=="undefined"&&Array.isArray(ARBITRI)?ARBITRI:[]);
+  const map=new Map(base.map(a=>[String(a.id),{...a,id:String(a.id)}]));
+
+  events.forEach(e=>{
+    (e.manualArbiters||[]).forEach(a=>{
+      const id=String(a.id);
+      if(!map.has(id)) map.set(id,{id,nome:String(a.nome||""),cognome:"",custom:true});
+    });
+    (e.available||[]).forEach(id=>{
+      const key=String(id);
+      if(!map.has(key)) map.set(key,{id:key,nome:key,cognome:"",custom:true});
+    });
+  });
+  return [...map.values()];
+}
+
+function wideAvailabilityFor(e,id){
+  const saved=(e.availabilityTimes||{})[String(id)];
+  if(saved) return {
+    mode:saved.mode==="partial"?"partial":"full",
+    start:saved.start||e.startTime||"",
+    end:saved.end||e.endTime||""
+  };
+  return {mode:"full",start:e.startTime||"",end:e.endTime||""};
+}
+
+function openWideAvailability(){
+  wideActiveArbiterId=null;
+  wideDraft={};
+  $("wideArbiterSearch").value="";
+  $("wideEventScope").value="future";
+  $("arbiterAvailabilityModal").classList.remove("hidden");
+  $("wideSelectedArbiter").classList.add("hidden");
+  $("wideEventsList").innerHTML="";
+  renderWideArbiters();
+  $("wideArbiterSearch").focus();
+}
+function closeWideAvailability(){$("arbiterAvailabilityModal").classList.add("hidden");}
+
+function renderWideArbiters(){
+  const q=$("wideArbiterSearch").value.trim().toLowerCase();
+  const list=getAllArbitersForWideView()
+    .filter(a=>fullName(a).toLowerCase().includes(q))
+    .sort((a,b)=>fullName(a).localeCompare(fullName(b),"it"))
+    .slice(0,60);
+
+  $("wideArbiterResults").innerHTML=list.length
+    ? list.map(a=>`<button type="button" class="wide-arbiter-result ${String(a.id)===String(wideActiveArbiterId)?"active":""}" onclick="selectWideArbiter('${escapeHtml(String(a.id))}')">${escapeHtml(fullName(a))}</button>`).join("")
+    : `<div class="empty small-empty">${q?"Nessun arbitro trovato.":"Inizia a digitare nome o cognome."}</div>`;
+}
+
+window.selectWideArbiter=function(id){
+  wideActiveArbiterId=String(id);
+  wideDraft={};
+  const arb=getAllArbitersForWideView().find(a=>String(a.id)===String(id));
+  $("wideSelectedArbiter").classList.remove("hidden");
+  $("wideSelectedArbiter").innerHTML=`<strong>${escapeHtml(fullName(arb))}</strong><span>Modifica le disponibilità degli eventi qui sotto.</span>`;
+  renderWideArbiters();
+  renderWideEvents();
+};
+
+function renderWideEvents(){
+  if(wideActiveArbiterId===null){$("wideEventsList").innerHTML="";return;}
+
+  const scope=$("wideEventScope").value;
+  const list=events.filter(e=>scope==="all"||isFutureEvent(e)).slice().sort((a,b)=>{
+    const da=eventDateTime(a)?.getTime()??Number.MAX_SAFE_INTEGER;
+    const db=eventDateTime(b)?.getTime()??Number.MAX_SAFE_INTEGER;
+    return da-db;
+  });
+
+  $("wideEventsList").innerHTML=list.map(e=>{
+    const id=String(e.id);
+    const available=(e.available||[]).map(String).includes(String(wideActiveArbiterId));
+    const original=wideAvailabilityFor(e,wideActiveArbiterId);
+    const draft=wideDraft[id]||{available,mode:original.mode,start:original.start,end:original.end};
+
+    return `<div class="wide-event-row" data-wide-event-id="${escapeHtml(id)}">
+      <div class="wide-event-info"><strong>${escapeHtml(e.name)}</strong><span>${formatDate(e.date)}${e.startTime?" · "+e.startTime:""}${e.endTime?"–"+e.endTime:""}${e.place?" · "+escapeHtml(e.place):""}</span></div>
+      <div class="wide-event-controls">
+        <label class="wide-check"><input type="checkbox" class="wide-available" ${draft.available?"checked":""}><span>Disponibile</span></label>
+        <select class="wide-mode" ${draft.available?"":"disabled"}><option value="full" ${draft.mode==="full"?"selected":""}>Tutto l'evento</option><option value="partial" ${draft.mode==="partial"?"selected":""}>Solo fascia</option></select>
+        <div class="wide-times ${draft.available&&draft.mode==="partial"?"":"hidden"}"><input class="wide-start" type="time" value="${escapeHtml(draft.start)}"><span>→</span><input class="wide-end" type="time" value="${escapeHtml(draft.end)}"></div>
+      </div>
+    </div>`;
+  }).join("")||`<div class="empty">Nessun evento nella vista selezionata.</div>`;
+
+  document.querySelectorAll(".wide-event-row").forEach(row=>{
+    const id=row.dataset.wideEventId;
+    const e=events.find(x=>String(x.id)===id);
+    const check=row.querySelector(".wide-available");
+    const mode=row.querySelector(".wide-mode");
+    const start=row.querySelector(".wide-start");
+    const end=row.querySelector(".wide-end");
+
+    const sync=()=>{
+      wideDraft[id]={
+        available:check.checked,
+        mode:mode.value,
+        start:start?.value||e?.startTime||"",
+        end:end?.value||e?.endTime||""
+      };
+      mode.disabled=!check.checked;
+      row.querySelector(".wide-times").classList.toggle("hidden",!(check.checked&&mode.value==="partial"));
+    };
+
+    check.onchange=sync;
+    mode.onchange=sync;
+    if(start) start.oninput=sync;
+    if(end) end.oninput=sync;
+  });
+}
+
+async function saveWideAvailability(){
+  if(wideActiveArbiterId===null)return;
+
+  const btn=$("saveWideAvailabilityBtn");
+  const rows=[...document.querySelectorAll(".wide-event-row")];
+  btn.disabled=true;
+  btn.textContent="Salvataggio…";
+
+  try{
+    for(const row of rows){
+      const eventId=row.dataset.wideEventId;
+      const e=events.find(x=>String(x.id)===String(eventId));
+      if(!e)continue;
+
+      const check=row.querySelector(".wide-available");
+      const mode=row.querySelector(".wide-mode");
+      const start=row.querySelector(".wide-start");
+      const end=row.querySelector(".wide-end");
+
+      const available=new Set((e.available||[]).map(String));
+      const assigned=new Set((e.assigned||[]).map(String));
+      const times={...(e.availabilityTimes||{})};
+      const id=String(wideActiveArbiterId);
+
+      if(check.checked){
+        available.add(id);
+        times[id]={
+          mode:mode.value==="partial"?"partial":"full",
+          start:mode.value==="partial"?(start?.value||e.startTime||""):(e.startTime||""),
+          end:mode.value==="partial"?(end?.value||e.endTime||""):(e.endTime||"")
+        };
+      }else{
+        available.delete(id);
+        delete times[id];
+        assigned.delete(id);
+      }
+
+      await apiGet({
+        action:"saveParticipants",
+        eventId:e.id,
+        available:JSON.stringify([...available]),
+        assigned:JSON.stringify([...assigned]),
+        manual:JSON.stringify(e.manualArbiters||[]),
+        availabilityTimes:JSON.stringify(times)
+      });
+
+      e.available=[...available];
+      e.assigned=[...assigned];
+      e.availabilityTimes=times;
+    }
+
+    closeWideAvailability();
+    renderEvents();
+  }catch(err){
+    console.error(err);
+    alert("Errore nel salvataggio delle disponibilità: "+err.message);
+  }finally{
+    btn.disabled=false;
+    btn.textContent="Salva disponibilità";
+  }
+}
+
+$("arbiterAvailabilityBtn").onclick=openWideAvailability;
+$("closeArbiterAvailabilityBtn").onclick=closeWideAvailability;
+$("cancelWideAvailabilityBtn").onclick=closeWideAvailability;
+$("saveWideAvailabilityBtn").onclick=saveWideAvailability;
+$("wideArbiterSearch").oninput=renderWideArbiters;
+$("wideEventScope").onchange=renderWideEvents;
+$("viewFilter").onchange=renderEvents;
+$("sortFilter").onchange=renderEvents;
 
 loadFromServer();
 

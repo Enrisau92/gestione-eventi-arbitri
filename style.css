@@ -28,3 +28,39 @@
   .event-card{display:block;padding:14px;border-radius:12px}.event-main h3{font-size:16px;margin:3px 0 5px}.event-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px}.metric{background:#f6f7fb;border-radius:9px;padding:8px;text-align:center}.metric strong{font-size:17px}.metric span{font-size:10px}.availability-metric{min-width:0}.event-actions{flex-direction:row;align-items:center;justify-content:space-between;margin-top:12px}
   .modal{padding:0;align-items:flex-end}.modal-card,.modal-card.large{width:100%;max-height:94vh;border-radius:16px 16px 0 0;padding:16px}.modal-head h2{font-size:19px}.detail-summary{grid-template-columns:repeat(3,1fr);gap:7px;margin:8px 0 14px}.detail-summary div{padding:9px;text-align:center}.detail-summary strong{font-size:19px}.detail-summary span{font-size:10px}.detail-availability{min-width:0}.tabs{margin:4px -16px 14px;padding:0 16px;position:sticky;top:0;background:#fff;z-index:2}.tab{flex:1;padding:10px 7px;font-size:13px}.search-row{gap:7px}.manual-row{flex-direction:row}.manual-row input{min-width:0}.manual-row .ghost{white-space:nowrap;padding:9px 10px;font-size:12px}.arbiter-list{grid-template-columns:1fr}.arbiter-item{padding:10px}.availability-controls{display:grid;grid-template-columns:1fr;gap:6px}.availability-mode{width:100%}.time-range{display:grid;grid-template-columns:1fr auto 1fr}.time-range input{width:100%;padding:8px}.assigned-list{grid-template-columns:1fr}.assigned-item{padding:10px}.assigned-meta{flex-direction:column;align-items:flex-end;gap:4px}.form-actions{margin-top:14px;position:sticky;bottom:0;background:#fff;padding-top:10px}
 }
+
+/* =========================================================
+   V9 — filtri + disponibilità per arbitro
+========================================================= */
+.top-actions{display:flex;align-items:center;gap:8px}
+.secondary{border:1px solid #d8dde7;background:#fff;color:#344054;border-radius:10px;padding:11px 14px;font-weight:700;cursor:pointer}
+.toolbar select{min-width:150px}
+.arbiter-wide-card{width:min(1050px,100%)}
+.arbiter-wide-toolbar{display:flex;gap:10px;margin-bottom:12px}
+.arbiter-wide-toolbar input,.arbiter-wide-toolbar select{background:#fff;border:1px solid #d8dde7;border-radius:10px;padding:11px 12px;font-size:14px}
+.arbiter-wide-toolbar input{flex:1}
+.arbiter-wide-toolbar select{min-width:190px}
+.wide-arbiter-results{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px;max-height:120px;overflow:auto}
+.wide-arbiter-result{border:1px solid #d8dde7;background:#fff;border-radius:999px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer}
+.wide-arbiter-result.active{background:#5b56d6;color:#fff;border-color:#5b56d6}
+.small-empty{padding:20px;width:100%}
+.wide-selected-arbiter{display:flex;align-items:baseline;gap:10px;background:#f6f7fb;border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.wide-selected-arbiter strong{font-size:16px}.wide-selected-arbiter span{font-size:12px;color:#667085}
+.wide-events-list{display:grid;gap:7px;max-height:50vh;overflow:auto;padding-right:2px}
+.wide-event-row{display:grid;grid-template-columns:minmax(220px,1fr) minmax(380px,1.3fr);gap:15px;align-items:center;border:1px solid #e4e7ec;border-radius:10px;padding:10px 12px}
+.wide-event-info strong{display:block;font-size:13px}.wide-event-info span{display:block;color:#667085;font-size:11px;margin-top:3px}
+.wide-event-controls{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.wide-check{display:flex;align-items:center;gap:6px;margin:0;font-size:12px}.wide-check input{width:auto;margin:0}
+.wide-mode{border:1px solid #d8dde7;background:#fff;border-radius:8px;padding:7px 9px;font-size:12px}
+.wide-times{display:flex;align-items:center;gap:5px}.wide-times input{border:1px solid #d8dde7;border-radius:8px;padding:7px 6px;font:inherit;font-size:12px}
+@media(max-width:800px){
+  .top-actions{width:100%;justify-content:flex-end}.topbar{align-items:flex-start}
+  .top-actions .secondary{font-size:12px;padding:9px 10px}
+  .toolbar select{min-width:0;width:100%}
+  .arbiter-wide-toolbar{flex-direction:column}.arbiter-wide-toolbar select{width:100%}
+  .wide-events-list{max-height:55vh}.wide-event-row{display:block;padding:11px}
+  .wide-event-info{margin-bottom:9px}.wide-event-controls{display:grid;grid-template-columns:1fr;gap:7px}
+  .wide-check{padding:2px 0}.wide-mode{width:100%}
+  .wide-times{display:grid;grid-template-columns:1fr auto 1fr}.wide-times input{width:100%}
+  .wide-selected-arbiter{display:block}.wide-selected-arbiter span{display:block;margin-top:3px}
+}
