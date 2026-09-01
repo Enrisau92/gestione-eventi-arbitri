@@ -5,6 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gestione Eventi Arbitri</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .top-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .secondary{border:1px solid #d8dde7;background:#fff;color:#344054;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+    .report-card{width:min(1100px,100%)}
+    .report-layout{display:grid;grid-template-columns:360px 1fr;gap:18px}
+    .report-panel{border:1px solid #e4e7ec;border-radius:12px;padding:12px;background:#f8f9fb}
+    .report-panel h3{margin:2px 0 10px;font-size:15px}
+    .report-filters{display:flex;gap:8px;margin-bottom:10px}
+    .report-filters input{flex:1;background:#fff;border:1px solid #d8dde7;border-radius:9px;padding:10px;font:inherit}
+    .report-check{display:flex;align-items:center;gap:8px;font-size:12px;color:#475467;margin:8px 0 12px}
+    .report-events-list{display:grid;gap:7px;max-height:55vh;overflow:auto}
+    .report-event-option{display:flex;align-items:flex-start;gap:9px;background:#fff;border:1px solid #e4e7ec;border-radius:9px;padding:10px;cursor:pointer;margin:0}
+    .report-event-option input{margin-top:3px}
+    .report-event-option span{display:flex;flex-direction:column;gap:3px;min-width:0}
+    .report-event-option strong{font-size:13px;color:#172033}
+    .report-event-option small{font-size:11px;color:#667085;line-height:1.35}
+    .report-preview{background:#fff;border:1px solid #e4e7ec;border-radius:12px;padding:18px;min-height:300px;max-height:65vh;overflow:auto}
+    .report-empty{display:flex;align-items:center;justify-content:center;min-height:260px;color:#667085;text-align:center}
+    .report-preview-event{padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid #e4e7ec}
+    .report-preview-event:last-child{border-bottom:0;margin-bottom:0}
+    .report-preview-event h3{margin:3px 0 5px;font-size:17px}
+    .report-assigned-title{font-weight:800;font-size:13px;margin:14px 0 7px}
+    .report-assigned-names{display:grid;gap:5px;font-size:13px}
+    .report-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:14px}
+    @media(max-width:800px){
+      .top-actions{width:100%}.top-actions button{flex:1}
+      .report-layout{grid-template-columns:1fr}.report-events-list{max-height:30vh}.report-preview{max-height:45vh}
+    }
+    @media(max-width:700px){.secondary{padding:9px 10px;font-size:12px}.report-card{max-height:96vh}}
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -14,6 +44,7 @@
     </div>
     <div class="top-actions">
       <button class="secondary" id="arbiterAvailabilityBtn">Disponibilità arbitri</button>
+      <button class="secondary" id="reportBtn">Report designazioni</button>
       <button class="primary" id="newEventBtn">+ Nuovo evento</button>
     </div>
   </header>
@@ -38,7 +69,6 @@
         <option value="name">Nome A–Z</option>
       </select>
     </section>
-
     <section id="eventsList" class="events"></section>
   </main>
 
@@ -48,7 +78,6 @@
         <h2 id="modalTitle">Nuovo evento</h2>
         <button class="icon" id="closeModalBtn" aria-label="Chiudi">×</button>
       </div>
-
       <form id="eventForm">
         <input type="hidden" id="eventId">
         <div class="grid2">
@@ -79,89 +108,70 @@
   <div id="detailModal" class="modal hidden">
     <div class="modal-card large">
       <div class="modal-head">
-        <div>
-          <div class="eyebrow" id="detailType"></div>
-          <h2 id="detailTitle"></h2>
-          <div class="muted" id="detailMeta"></div>
-        </div>
+        <div><div class="eyebrow" id="detailType"></div><h2 id="detailTitle"></h2><div class="muted" id="detailMeta"></div></div>
         <button class="icon" id="closeDetailBtn" aria-label="Chiudi">×</button>
       </div>
-
       <div class="detail-summary">
         <div><strong id="detailRequired">0</strong><span>richiesti</span></div>
-        <div class="detail-availability">
-          <strong id="detailAvailable">0</strong><span>disponibili</span>
-          <div class="coverage-bar"><div id="detailCoverageFill" class="coverage-fill"></div></div>
-          <small id="detailCoverageLabel"></small>
-        </div>
+        <div class="detail-availability"><strong id="detailAvailable">0</strong><span>disponibili</span><div class="coverage-bar"><div id="detailCoverageFill" class="coverage-fill"></div></div><small id="detailCoverageLabel"></small></div>
         <div><strong id="detailAssigned">0</strong><span>designati</span></div>
       </div>
-
       <div class="tabs">
         <button class="tab active" data-tab="availability">Disponibilità <span id="availabilityTabCount">0</span></button>
         <button class="tab" data-tab="assignments">Designazioni <span id="assignmentTabCount">0</span></button>
       </div>
-
       <section id="availabilityView" class="tab-view">
         <div class="section-title">Seleziona gli arbitri disponibili</div>
-        <div class="search-row">
-          <input id="arbiterSearch" type="search" placeholder="🔍 Cerca nome o cognome…">
-          <button class="ghost" id="clearAvailabilityBtn">Azzera selezioni</button>
-        </div>
-        <div class="manual-row">
-          <input id="manualArbiterName" type="text" placeholder="Nome e cognome non presenti nell'elenco…">
-          <button class="ghost" id="addManualArbiterBtn">+ Aggiungi nome</button>
-        </div>
+        <div class="search-row"><input id="arbiterSearch" type="search" placeholder="🔍 Cerca nome o cognome…"><button class="ghost" id="clearAvailabilityBtn">Azzera selezioni</button></div>
+        <div class="manual-row"><input id="manualArbiterName" type="text" placeholder="Nome e cognome non presenti nell'elenco…"><button class="ghost" id="addManualArbiterBtn">+ Aggiungi nome</button></div>
         <div class="hint-block">Per ogni arbitro puoi indicare <strong>tutto l'evento</strong> oppure una <strong>fascia oraria</strong>.</div>
         <div id="arbiterResults" class="arbiter-list"></div>
       </section>
-
       <section id="assignmentsView" class="tab-view hidden">
         <div class="section-title">Scegli i designati <span class="hint">Solo tra gli arbitri disponibili</span></div>
-        <div class="search-row">
-          <input id="assignmentSearch" type="search" placeholder="🔍 Cerca tra i disponibili…">
-        </div>
+        <div class="search-row"><input id="assignmentSearch" type="search" placeholder="🔍 Cerca tra i disponibili…"></div>
         <div id="assignedList" class="assigned-list"></div>
       </section>
-
-      <div class="form-actions">
-        <button type="button" class="danger ghost" id="deleteEventBtn">Elimina evento</button>
-        <button type="button" class="primary" id="saveDetailBtn">Salva</button>
-      </div>
+      <div class="form-actions"><button type="button" class="danger ghost" id="deleteEventBtn">Elimina evento</button><button type="button" class="primary" id="saveDetailBtn">Salva</button></div>
     </div>
   </div>
-
-
 
   <div id="arbiterAvailabilityModal" class="modal hidden">
     <div class="modal-card large arbiter-wide-card">
-      <div class="modal-head">
-        <div>
-          <div class="eyebrow">GESTIONE TRASVERSALE</div>
-          <h2>Disponibilità arbitri</h2>
-          <div class="muted">Gestisci in un'unica schermata la disponibilità di un arbitro su più eventi.</div>
-        </div>
-        <button class="icon" id="closeArbiterAvailabilityBtn" aria-label="Chiudi">×</button>
-      </div>
-
-      <div class="arbiter-wide-toolbar">
-        <input id="wideArbiterSearch" type="search" placeholder="🔍 Cerca arbitro per nome o cognome…">
-        <select id="wideEventScope">
-          <option value="future">Solo eventi futuri</option>
-          <option value="all">Tutti gli eventi</option>
-        </select>
-      </div>
-
+      <div class="modal-head"><div><div class="eyebrow">GESTIONE TRASVERSALE</div><h2>Disponibilità arbitri</h2><div class="muted">Gestisci in un'unica schermata la disponibilità di un arbitro su più eventi.</div></div><button class="icon" id="closeArbiterAvailabilityBtn" aria-label="Chiudi">×</button></div>
+      <div class="arbiter-wide-toolbar"><input id="wideArbiterSearch" type="search" placeholder="🔍 Cerca arbitro per nome o cognome…"><select id="wideEventScope"><option value="future">Solo eventi futuri</option><option value="all">Tutti gli eventi</option></select></div>
       <div id="wideArbiterResults" class="wide-arbiter-results"></div>
       <div id="wideSelectedArbiter" class="wide-selected-arbiter hidden"></div>
       <div id="wideEventsList" class="wide-events-list"></div>
+      <div class="form-actions"><button type="button" class="ghost" id="cancelWideAvailabilityBtn">Chiudi</button><button type="button" class="primary" id="saveWideAvailabilityBtn">Salva disponibilità</button></div>
+    </div>
+  </div>
 
-      <div class="form-actions">
-        <button type="button" class="ghost" id="cancelWideAvailabilityBtn">Chiudi</button>
-        <button type="button" class="primary" id="saveWideAvailabilityBtn">Salva disponibilità</button>
+  <div id="reportModal" class="modal hidden">
+    <div class="modal-card large report-card">
+      <div class="modal-head">
+        <div><div class="eyebrow">COMUNICAZIONE ALLE SOCIETÀ</div><h2>Report designazioni</h2><div class="muted">Seleziona uno o più eventi per creare una situazione degli arbitri designati.</div></div>
+        <button class="icon" id="closeReportBtn" aria-label="Chiudi">×</button>
+      </div>
+      <div class="report-layout">
+        <section class="report-panel">
+          <h3>Eventi</h3>
+          <div class="report-filters"><input id="reportEventSearch" type="search" placeholder="🔍 Cerca evento…"></div>
+          <label class="report-check"><input id="reportOnlyAssigned" type="checkbox" checked><span>Mostra solo eventi con designazioni</span></label>
+          <div id="reportEventsList" class="report-events-list"></div>
+        </section>
+        <section>
+          <div id="reportPreview" class="report-preview"></div>
+          <div class="report-actions">
+            <button type="button" class="ghost" id="cancelReportBtn">Chiudi</button>
+            <button type="button" class="secondary" id="exportReportBtn">Esporta Excel</button>
+            <button type="button" class="primary" id="printReportBtn">Stampa / PDF</button>
+          </div>
+        </section>
       </div>
     </div>
   </div>
+
   <script src="arbitri.js"></script>
   <script src="app.js"></script>
 </body>
