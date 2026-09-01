@@ -17,14 +17,9 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-/* =========================================================
-   API
-========================================================= */
-
 function apiGet(params) {
   return new Promise((resolve, reject) => {
     const callback = "cb_" + uid();
-
     const script = document.createElement("script");
 
     const query = new URLSearchParams({
@@ -46,21 +41,13 @@ function apiGet(params) {
     script.onerror = () => {
       delete window[callback];
       script.remove();
-
-      reject(
-        new Error("Impossibile contattare il database condiviso.")
-      );
+      reject(new Error("Impossibile contattare il database condiviso."));
     };
 
     script.src = API_URL + "?" + query.toString();
-
     document.body.appendChild(script);
   });
 }
-
-/* =========================================================
-   CARICAMENTO DATABASE
-========================================================= */
 
 async function loadFromServer() {
   try {
@@ -79,19 +66,13 @@ async function loadFromServer() {
 
     $("eventsList").innerHTML = `
       <div class="empty">
-        <strong>Errore di collegamento al database</strong>
-        <br>
-        ${escapeHtml(err.message)}
-        <br><br>
+        <strong>Errore di collegamento al database</strong><br>
+        ${escapeHtml(err.message)}<br><br>
         Ricarica la pagina e riprova.
       </div>
     `;
   }
 }
-
-/* =========================================================
-   UTILITY
-========================================================= */
 
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, m => ({
@@ -140,32 +121,18 @@ function statusOf(e) {
   const assigned = (e.assigned || []).length;
   const required = Number(e.required) || 0;
 
-  if (assigned === 0) {
-    return "none";
-  }
-
-  if (assigned >= required) {
-    return "complete";
-  }
+  if (assigned === 0) return "none";
+  if (assigned >= required) return "complete";
 
   return "partial";
 }
 
 function statusLabel(status) {
-  if (status === "complete") {
-    return "Completo";
-  }
-
-  if (status === "partial") {
-    return "Da completare";
-  }
+  if (status === "complete") return "Completo";
+  if (status === "partial") return "Da completare";
 
   return "Nessun designato";
 }
-
-/* =========================================================
-   LISTA EVENTI
-========================================================= */
 
 function renderEvents() {
 
@@ -185,11 +152,6 @@ function renderEvents() {
 
   let list = events.slice();
 
-  /*
-   * Vista standard:
-   * solo eventi futuri.
-   */
-
   if (viewFilter === "future") {
     list = list.filter(isFutureEvent);
   }
@@ -198,10 +160,6 @@ function renderEvents() {
     list = list.filter(e => !isFutureEvent(e));
   }
 
-  /*
-   * Ricerca.
-   */
-
   list = list.filter(e => {
 
     const text =
@@ -209,8 +167,7 @@ function renderEvents() {
         .toLowerCase();
 
     const matchesSearch =
-      !search ||
-      text.includes(search);
+      !search || text.includes(search);
 
     const matchesStatus =
       statusFilter === "all" ||
@@ -219,14 +176,9 @@ function renderEvents() {
     return matchesSearch && matchesStatus;
   });
 
-  /*
-   * Ordinamento.
-   */
-
   list.sort((a, b) => {
 
     if (sortFilter === "name") {
-
       return String(a.name || "")
         .localeCompare(
           String(b.name || ""),
@@ -242,11 +194,9 @@ function renderEvents() {
       eventDateTime(b)?.getTime()
       ?? Number.MAX_SAFE_INTEGER;
 
-    if (sortFilter === "desc") {
-      return db - da;
-    }
-
-    return da - db;
+    return sortFilter === "desc"
+      ? db - da
+      : da - db;
   });
 
   if (!list.length) {
@@ -268,10 +218,13 @@ function renderEvents() {
           (e.available || []).map(String)
         ).size;
 
-      const assigned =
-        new Set(
+      const assignedIds =
+        [...new Set(
           (e.assigned || []).map(String)
-        ).size;
+        )];
+
+      const assigned =
+        assignedIds.length;
 
       const required =
         Number(e.required) || 0;
@@ -286,6 +239,17 @@ function renderEvents() {
             Math.max(1, required)) *
             100
         );
+
+      const arbiters =
+        getArbitersByIds(
+          assignedIds,
+          e.manualArbiters || []
+        );
+
+      const assignedNames =
+        arbiters
+          .map(a => fullName(a))
+          .filter(Boolean);
 
       return `
         <article class="event-card">
@@ -313,17 +277,26 @@ function renderEvents() {
                 : ""}
             </div>
 
+            ${
+              assignedNames.length
+                ? `
+                  <div class="assigned-home">
+                    <strong>Designati:</strong>
+                    ${assignedNames
+                      .map(escapeHtml)
+                      .join(" · ")}
+                  </div>
+                `
+                : ""
+            }
+
           </div>
 
           <div class="event-stats">
 
             <div class="metric">
-              <strong>
-                ${required}
-              </strong>
-              <span>
-                richiesti
-              </span>
+              <strong>${required}</strong>
+              <span>richiesti</span>
             </div>
 
             <div class="metric availability-metric ${
@@ -336,9 +309,7 @@ function renderEvents() {
                 ${available}/${required}
               </strong>
 
-              <span>
-                disponibili
-              </span>
+              <span>disponibili</span>
 
               <div class="coverage-bar">
                 <div
@@ -350,12 +321,8 @@ function renderEvents() {
             </div>
 
             <div class="metric">
-              <strong>
-                ${assigned}
-              </strong>
-              <span>
-                designati
-              </span>
+              <strong>${assigned}</strong>
+              <span>designati</span>
             </div>
 
           </div>
@@ -389,9 +356,43 @@ function renderEvents() {
     }).join("");
 }
 
-/* =========================================================
-   DUPLICAZIONE EVENTO
-========================================================= */
+function getArbitersByIds(ids, manualArbiters = []) {
+
+  const base =
+    Array.isArray(window.ARBITRI)
+      ? window.ARBITRI
+      : (
+          typeof ARBITRI !== "undefined" &&
+          Array.isArray(ARBITRI)
+        )
+          ? ARBITRI
+          : [];
+
+  const map = new Map();
+
+  base.forEach(a => {
+    map.set(
+      String(a.id),
+      a
+    );
+  });
+
+  manualArbiters.forEach(a => {
+    map.set(
+      String(a.id),
+      {
+        id: String(a.id),
+        nome: a.nome || "",
+        cognome: "",
+        custom: true
+      }
+    );
+  });
+
+  return ids
+    .map(id => map.get(String(id)))
+    .filter(Boolean);
+}
 
 window.duplicateEvent = id => {
 
@@ -405,13 +406,6 @@ window.duplicateEvent = id => {
 
     id: uid(),
 
-    /*
-     * Una duplicazione serve normalmente
-     * per un'altra data/evento.
-     *
-     * Non copiamo disponibilità/designazioni.
-     */
-
     available: [],
     assigned: [],
     manualArbiters: [],
@@ -422,10 +416,6 @@ window.duplicateEvent = id => {
 
   openEventForm(copy);
 };
-
-/* =========================================================
-   FORM EVENTO
-========================================================= */
 
 function openEventForm(e = null) {
 
@@ -565,16 +555,12 @@ $("eventForm").onsubmit =
       });
 
       if (existing) {
-
         Object.assign(
           existing,
           obj
         );
-
       } else {
-
         events.push(obj);
-
       }
 
       closeEventForm();
@@ -596,9 +582,8 @@ $("eventForm").onsubmit =
         "Salva evento";
     }
   };
-
 /* =========================================================
-   GESTISCI EVENTO
+   GESTIONE EVENTO
 ========================================================= */
 
 function openDetail(id) {
@@ -639,16 +624,9 @@ function openDetail(id) {
               e.endTime ||
               ""
           }
-
         ]
       )
     );
-
-  /*
-   * Compatibilità con disponibilità
-   * precedenti che non avevano
-   * availabilityTimes.
-   */
 
   [...tempAvailable].forEach(
     arbiterId => {
@@ -700,11 +678,8 @@ function openDetail(id) {
       ? " · " + e.place
       : ""}`;
 
-  $("arbiterSearch").value =
-    "";
-
-  $("assignmentSearch").value =
-    "";
+  $("arbiterSearch").value = "";
+  $("assignmentSearch").value = "";
 
   document
     .querySelectorAll(".tab")
@@ -879,7 +854,7 @@ function availabilityLabel(id) {
 }
 
 /* =========================================================
-   DISPONIBILITÀ EVENTO
+   DISPONIBILITÀ
 ========================================================= */
 
 function renderArbiters() {
@@ -1147,7 +1122,7 @@ function renderAssigned() {
 }
 
 /* =========================================================
-   AZIONI DISPONIBILITÀ / DESIGNAZIONI
+   AZIONI
 ========================================================= */
 
 window.toggleAvailable = id => {
@@ -1162,11 +1137,6 @@ window.toggleAvailable = id => {
     tempAvailable.delete(key);
 
     tempAvailability.delete(key);
-
-    /*
-     * Un arbitro non disponibile
-     * non può rimanere designato.
-     */
 
     tempAssigned.delete(key);
 
@@ -1291,11 +1261,6 @@ window.toggleAssigned = id => {
 
   } else {
 
-    /*
-     * È possibile designare
-     * solamente un arbitro disponibile.
-     */
-
     if (
       tempAvailable.has(key)
     ) {
@@ -1307,7 +1272,7 @@ window.toggleAssigned = id => {
 };
 
 /* =========================================================
-   RICERCA ARBITRI
+   RICERCHE E TAB
 ========================================================= */
 
 $("arbiterSearch").oninput =
@@ -1315,10 +1280,6 @@ $("arbiterSearch").oninput =
 
 $("assignmentSearch").oninput =
   renderAssigned;
-
-/* =========================================================
-   TAB
-========================================================= */
 
 document
   .querySelectorAll(".tab")
@@ -1362,10 +1323,6 @@ document
     };
   });
 
-/* =========================================================
-   AZZERA DISPONIBILITÀ
-========================================================= */
-
 $("clearAvailabilityBtn").onclick =
   () => {
 
@@ -1375,10 +1332,6 @@ $("clearAvailabilityBtn").onclick =
 
     renderDetail();
   };
-
-/* =========================================================
-   CHIUSURA DETTAGLIO
-========================================================= */
 
 $("closeDetailBtn").onclick =
   () => {
@@ -1462,7 +1415,7 @@ $("manualArbiterName")
   );
 
 /* =========================================================
-   SALVATAGGIO DETTAGLIO
+   SALVATAGGIO DISPONIBILITÀ / DESIGNAZIONI
 ========================================================= */
 
 $("saveDetailBtn").onclick =
@@ -1556,7 +1509,7 @@ $("saveDetailBtn").onclick =
   };
 
 /* =========================================================
-   ELIMINAZIONE EVENTO
+   ELIMINAZIONE
 ========================================================= */
 
 $("deleteEventBtn").onclick =
@@ -1604,9 +1557,8 @@ $("deleteEventBtn").onclick =
       );
     }
   };
-
 /* =========================================================
-   GESTIONE TRASVERSALE DISPONIBILITÀ
+   DISPONIBILITÀ TRASVERSALE PER ARBITRO
 ========================================================= */
 
 let wideActiveArbiterId = null;
@@ -1623,12 +1575,7 @@ function getAllArbitersForWideView() {
           ? ARBITRI
           : [];
 
-  const map =
-    new Map();
-
-  /*
-   * Partiamo dall'elenco ufficiale.
-   */
+  const map = new Map();
 
   base.forEach(a => {
 
@@ -1640,11 +1587,6 @@ function getAllArbitersForWideView() {
       }
     );
   });
-
-  /*
-   * Aggiungiamo eventuali arbitri
-   * manuali già presenti negli eventi.
-   */
 
   events.forEach(e => {
 
@@ -1677,10 +1619,7 @@ function getAllArbitersForWideView() {
   return [...map.values()];
 }
 
-function wideAvailabilityFor(
-  e,
-  id
-) {
+function wideAvailabilityFor(e, id) {
 
   const saved =
     (e.availabilityTimes || {})[
@@ -1708,11 +1647,6 @@ function wideAvailabilityFor(
 
     };
   }
-
-  /*
-   * Compatibilità con gli eventi
-   * che hanno solo available[].
-   */
 
   return {
 
@@ -1797,6 +1731,7 @@ function renderWideArbiters() {
     list.length
 
       ? list.map(a => `
+
           <button
             type="button"
             class="wide-arbiter-result ${
@@ -1818,9 +1753,11 @@ function renderWideArbiters() {
             )}
 
           </button>
+
         `).join("")
 
       : `
+
         <div class="empty small-empty">
 
           ${
@@ -1830,6 +1767,7 @@ function renderWideArbiters() {
           }
 
         </div>
+
       `;
 }
 
@@ -1871,6 +1809,7 @@ window.selectWideArbiter =
       `;
 
     renderWideArbiters();
+
     renderWideEvents();
   };
 
@@ -1949,23 +1888,28 @@ function renderWideEvents() {
             </strong>
 
             <span>
+
               ${formatDate(e.date)}
+
               ${
                 e.startTime
                   ? " · " + e.startTime
                   : ""
               }
+
               ${
                 e.endTime
                   ? "–" + e.endTime
                   : ""
               }
+
               ${
                 e.place
                   ? " · " +
                     escapeHtml(e.place)
                   : ""
               }
+
             </span>
 
           </div>
@@ -2004,7 +1948,9 @@ function renderWideEvents() {
                     ? "selected"
                     : ""
                 }>
+
                 Tutto l'evento
+
               </option>
 
               <option
@@ -2014,7 +1960,9 @@ function renderWideEvents() {
                     ? "selected"
                     : ""
                 }>
+
                 Solo fascia
+
               </option>
 
             </select>
@@ -2060,10 +2008,6 @@ function renderWideEvents() {
         Nessun evento nella vista selezionata.
       </div>
     `;
-
-  /*
-   * Gestione interattiva dei controlli.
-   */
 
   document
     .querySelectorAll(
@@ -2236,12 +2180,6 @@ async function saveWideAvailability() {
 
         delete times[id];
 
-        /*
-         * Se tolgo la disponibilità,
-         * tolgo anche l'eventuale
-         * designazione.
-         */
-
         assigned.delete(id);
       }
 
@@ -2307,7 +2245,836 @@ async function saveWideAvailability() {
 }
 
 /* =========================================================
-   NUOVA VISTA DISPONIBILITÀ
+   REPORT DESIGNAZIONI
+========================================================= */
+
+let reportSelectedEvents = new Set();
+
+function getReportEvents() {
+
+  const search =
+    $("reportEventSearch")
+      ? $("reportEventSearch")
+          .value
+          .trim()
+          .toLowerCase()
+      : "";
+
+  const onlyAssigned =
+    $("reportOnlyAssigned")
+      ? $("reportOnlyAssigned").checked
+      : true;
+
+  return events
+    .filter(e => {
+
+      if (
+        onlyAssigned &&
+        !(e.assigned || []).length
+      ) {
+        return false;
+      }
+
+      if (!search) {
+        return true;
+      }
+
+      const text =
+        `${e.name || ""} ${e.type || ""} ${e.place || ""} ${e.date || ""}`
+          .toLowerCase();
+
+      return text.includes(search);
+    })
+    .slice()
+    .sort(
+      (a, b) => {
+
+        const da =
+          eventDateTime(a)
+            ?.getTime()
+          ?? Number.MAX_SAFE_INTEGER;
+
+        const db =
+          eventDateTime(b)
+            ?.getTime()
+          ?? Number.MAX_SAFE_INTEGER;
+
+        return da - db;
+      }
+    );
+}
+
+function getReportAssigned(e) {
+
+  const ids =
+    [
+      ...new Set(
+        (e.assigned || [])
+          .map(String)
+      )
+    ];
+
+  return getArbitersByIds(
+    ids,
+    e.manualArbiters || []
+  );
+}
+
+function openReport() {
+
+  reportSelectedEvents =
+    new Set();
+
+  if (
+    $("reportModal")
+  ) {
+
+    $("reportModal")
+      .classList.remove(
+        "hidden"
+      );
+
+    if (
+      $("reportEventSearch")
+    ) {
+      $("reportEventSearch")
+        .value = "";
+    }
+
+    if (
+      $("reportOnlyAssigned")
+    ) {
+      $("reportOnlyAssigned")
+        .checked = true;
+    }
+
+    renderReportEvents();
+    renderReportPreview();
+  }
+}
+
+function closeReport() {
+
+  if (
+    $("reportModal")
+  ) {
+
+    $("reportModal")
+      .classList.add(
+        "hidden"
+      );
+  }
+}
+
+function renderReportEvents() {
+
+  const list =
+    getReportEvents();
+
+  const container =
+    $("reportEventsList");
+
+  if (!container) return;
+
+  container.innerHTML =
+    list.length
+
+      ? list.map(e => {
+
+          const id =
+            String(e.id);
+
+          const checked =
+            reportSelectedEvents
+              .has(id);
+
+          const assigned =
+            getReportAssigned(e);
+
+          return `
+
+            <label
+              class="report-event-option">
+
+              <input
+                type="checkbox"
+                data-report-event="${escapeHtml(id)}"
+                ${
+                  checked
+                    ? "checked"
+                    : ""
+                }>
+
+              <span>
+
+                <strong>
+                  ${escapeHtml(
+                    e.name
+                  )}
+                </strong>
+
+                <small>
+
+                  ${formatDate(e.date)}
+
+                  ${
+                    e.startTime
+                      ? " · " +
+                        e.startTime
+                      : ""
+                  }
+
+                  ${
+                    e.endTime
+                      ? "–" +
+                        e.endTime
+                      : ""
+                  }
+
+                  ${
+                    e.place
+                      ? " · " +
+                        escapeHtml(
+                          e.place
+                        )
+                      : ""
+                  }
+
+                  · ${
+                    assigned.length
+                  } designati
+
+                </small>
+
+              </span>
+
+            </label>
+
+          `;
+
+        }).join("")
+
+      : `
+        <div class="empty">
+          Nessun evento trovato.
+        </div>
+      `;
+
+  container
+    .querySelectorAll(
+      "[data-report-event]"
+    )
+    .forEach(input => {
+
+      input.onchange =
+        () => {
+
+          const id =
+            String(
+              input.dataset
+                .reportEvent
+            );
+
+          if (
+            input.checked
+          ) {
+
+            reportSelectedEvents
+              .add(id);
+
+          } else {
+
+            reportSelectedEvents
+              .delete(id);
+          }
+
+          renderReportPreview();
+        };
+    });
+}
+
+function renderReportPreview() {
+
+  const container =
+    $("reportPreview");
+
+  if (!container) return;
+
+  const selected =
+    events
+      .filter(
+        e =>
+          reportSelectedEvents
+            .has(String(e.id))
+      )
+      .sort(
+        (a, b) => {
+
+          const da =
+            eventDateTime(a)
+              ?.getTime()
+            ?? Number.MAX_SAFE_INTEGER;
+
+          const db =
+            eventDateTime(b)
+              ?.getTime()
+            ?? Number.MAX_SAFE_INTEGER;
+
+          return da - db;
+        }
+      );
+
+  if (!selected.length) {
+
+    container.innerHTML = `
+      <div class="report-empty">
+        Seleziona uno o più eventi
+        per visualizzare l'anteprima.
+      </div>
+    `;
+
+    return;
+  }
+
+  container.innerHTML =
+    selected.map(e => {
+
+      const assigned =
+        getReportAssigned(e);
+
+      return `
+
+        <section class="report-preview-event">
+
+          <div class="report-preview-head">
+
+            <div>
+
+              <div class="eyebrow">
+                ${escapeHtml(
+                  e.type
+                )}
+              </div>
+
+              <h3>
+                ${escapeHtml(
+                  e.name
+                )}
+              </h3>
+
+              <div class="muted">
+
+                ${formatDate(e.date)}
+
+                ${
+                  e.startTime
+                    ? " · " +
+                      e.startTime
+                    : ""
+                }
+
+                ${
+                  e.endTime
+                    ? "–" +
+                      e.endTime
+                    : ""
+                }
+
+                ${
+                  e.place
+                    ? " · " +
+                      escapeHtml(
+                        e.place
+                      )
+                    : ""
+                }
+
+              </div>
+
+            </div>
+
+          </div>
+
+          <div class="report-assigned-title">
+            Arbitri designati
+          </div>
+
+          <div class="report-assigned-names">
+
+            ${
+              assigned.length
+
+                ? assigned
+                    .map(
+                      (a, index) =>
+                        `<div>
+                          ${index + 1}.
+                          ${escapeHtml(
+                            fullName(a)
+                          )}
+                        </div>`
+                    )
+                    .join("")
+
+                : `<div>
+                    Nessun arbitro designato.
+                   </div>`
+            }
+
+          </div>
+
+        </section>
+
+      `;
+
+    }).join("");
+}
+
+/* =========================================================
+   GENERAZIONE DOCUMENTO PDF
+========================================================= */
+
+function buildPrintHtml() {
+
+  const selected =
+    events
+      .filter(
+        e =>
+          reportSelectedEvents
+            .has(String(e.id))
+      )
+      .sort(
+        (a, b) => {
+
+          const da =
+            eventDateTime(a)
+              ?.getTime()
+            ?? Number.MAX_SAFE_INTEGER;
+
+          const db =
+            eventDateTime(b)
+              ?.getTime()
+            ?? Number.MAX_SAFE_INTEGER;
+
+          return da - db;
+        }
+      );
+
+  const sections =
+    selected.map(e => {
+
+      const assigned =
+        getReportAssigned(e);
+
+      return `
+
+        <section class="print-event">
+
+          <div class="print-type">
+            ${escapeHtml(
+              e.type
+            )}
+          </div>
+
+          <h2>
+            ${escapeHtml(
+              e.name
+            )}
+          </h2>
+
+          <div class="print-meta">
+
+            ${formatDate(e.date)}
+
+            ${
+              e.startTime
+                ? " · " +
+                  e.startTime
+                : ""
+            }
+
+            ${
+              e.endTime
+                ? "–" +
+                  e.endTime
+                : ""
+            }
+
+            ${
+              e.place
+                ? " · " +
+                  escapeHtml(
+                    e.place
+                  )
+                : ""
+            }
+
+          </div>
+
+          <h3>
+            Arbitri designati
+          </h3>
+
+          <ol>
+
+            ${
+              assigned.length
+                ? assigned
+                    .map(
+                      a =>
+                        `<li>
+                          ${escapeHtml(
+                            fullName(a)
+                          )}
+                        </li>`
+                    )
+                    .join("")
+                : `<li>
+                    Nessun arbitro designato
+                   </li>`
+            }
+
+          </ol>
+
+        </section>
+
+      `;
+    }).join("");
+
+  return `
+
+    <!doctype html>
+
+    <html lang="it">
+
+    <head>
+
+      <meta charset="utf-8">
+
+      <title>
+        Designazioni arbitrali
+      </title>
+
+      <style>
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          padding: 40px;
+          color: #172033;
+          font-family:
+            Arial,
+            Helvetica,
+            sans-serif;
+          background: #fff;
+        }
+
+        .header {
+          border-bottom:
+            2px solid #172033;
+          padding-bottom: 18px;
+          margin-bottom: 30px;
+        }
+
+        .eyebrow {
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: .08em;
+          font-weight: 700;
+          color: #667085;
+        }
+
+        h1 {
+          margin: 6px 0 0;
+          font-size: 28px;
+        }
+
+        .print-event {
+          page-break-inside: avoid;
+          margin-bottom: 34px;
+          padding-bottom: 28px;
+          border-bottom:
+            1px solid #d8dde7;
+        }
+
+        .print-event:last-child {
+          border-bottom: 0;
+        }
+
+        .print-type {
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: .06em;
+          font-weight: 700;
+          color: #667085;
+        }
+
+        h2 {
+          margin: 5px 0 7px;
+          font-size: 21px;
+        }
+
+        h3 {
+          margin:
+            20px 0 8px;
+          font-size: 15px;
+        }
+
+        .print-meta {
+          color: #667085;
+          font-size: 13px;
+        }
+
+        ol {
+          margin:
+            8px 0 0 24px;
+          padding: 0;
+        }
+
+        li {
+          margin-bottom: 7px;
+          font-size: 15px;
+        }
+
+        @media print {
+
+          body {
+            padding: 20mm;
+          }
+
+        }
+
+      </style>
+
+    </head>
+
+    <body>
+
+      <header class="header">
+
+        <div class="eyebrow">
+          Commissione Arbitri
+        </div>
+
+        <h1>
+          Designazioni arbitrali
+        </h1>
+
+      </header>
+
+      ${sections}
+
+    </body>
+
+    </html>
+  `;
+}
+
+function printReport() {
+
+  if (
+    !reportSelectedEvents.size
+  ) {
+
+    alert(
+      "Seleziona almeno un evento."
+    );
+
+    return;
+  }
+
+  const html =
+    buildPrintHtml();
+
+  const printWindow =
+    window.open(
+      "",
+      "_blank"
+    );
+
+  if (!printWindow) {
+
+    alert(
+      "Il browser ha bloccato la finestra di stampa. Consenti le finestre popup per questo sito."
+    );
+
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+
+  printWindow.onload =
+    () => {
+
+      printWindow.focus();
+
+      setTimeout(
+        () => {
+          printWindow.print();
+        },
+        250
+      );
+    };
+}
+
+/* =========================================================
+   ESPORTAZIONE EXCEL
+========================================================= */
+
+function exportReportExcel() {
+
+  if (
+    !reportSelectedEvents.size
+  ) {
+
+    alert(
+      "Seleziona almeno un evento."
+    );
+
+    return;
+  }
+
+  const selected =
+    events
+      .filter(
+        e =>
+          reportSelectedEvents
+            .has(String(e.id))
+      )
+      .sort(
+        (a, b) => {
+
+          const da =
+            eventDateTime(a)
+              ?.getTime()
+            ?? Number.MAX_SAFE_INTEGER;
+
+          const db =
+            eventDateTime(b)
+              ?.getTime()
+            ?? Number.MAX_SAFE_INTEGER;
+
+          return da - db;
+        }
+      );
+
+  const rows = [
+    [
+      "Data",
+      "Ora inizio",
+      "Ora fine",
+      "Evento",
+      "Tipologia",
+      "Luogo",
+      "Arbitro designato"
+    ]
+  ];
+
+  selected.forEach(e => {
+
+    const assigned =
+      getReportAssigned(e);
+
+    if (!assigned.length) {
+
+      rows.push([
+        e.date || "",
+        e.startTime || "",
+        e.endTime || "",
+        e.name || "",
+        e.type || "",
+        e.place || "",
+        ""
+      ]);
+
+      return;
+    }
+
+    assigned.forEach(a => {
+
+      rows.push([
+        e.date || "",
+        e.startTime || "",
+        e.endTime || "",
+        e.name || "",
+        e.type || "",
+        e.place || "",
+        fullName(a)
+      ]);
+    });
+  });
+
+  const escapeCsv =
+    value =>
+      `"${String(
+        value ?? ""
+      ).replace(
+        /"/g,
+        '""'
+      )}"`;
+
+  const csv =
+    rows
+      .map(
+        row =>
+          row
+            .map(escapeCsv)
+            .join(";")
+      )
+      .join("\r\n");
+
+  /*
+   * BOM UTF-8 per Excel,
+   * soprattutto con nomi italiani.
+   */
+
+  const blob =
+    new Blob(
+      [
+        "\uFEFF" +
+        csv
+      ],
+      {
+        type:
+          "text/csv;charset=utf-8;"
+      }
+    );
+
+  const url =
+    URL.createObjectURL(
+      blob
+    );
+
+  const link =
+    document.createElement(
+      "a"
+    );
+
+  link.href = url;
+
+  link.download =
+    "designazioni_arbitrali.csv";
+
+  document.body.appendChild(
+    link
+  );
+
+  link.click();
+
+  link.remove();
+
+  URL.revokeObjectURL(
+    url
+  );
+}
+
+/* =========================================================
+   EVENTI REPORT
 ========================================================= */
 
 if (
@@ -2364,26 +3131,97 @@ if (
     renderWideEvents;
 }
 
+if (
+  $("reportBtn")
+) {
+
+  $("reportBtn")
+    .onclick =
+    openReport;
+}
+
+if (
+  $("closeReportBtn")
+) {
+
+  $("closeReportBtn")
+    .onclick =
+    closeReport;
+}
+
+if (
+  $("cancelReportBtn")
+) {
+
+  $("cancelReportBtn")
+    .onclick =
+    closeReport;
+}
+
+if (
+  $("printReportBtn")
+) {
+
+  $("printReportBtn")
+    .onclick =
+    printReport;
+}
+
+if (
+  $("exportReportBtn")
+) {
+
+  $("exportReportBtn")
+    .onclick =
+    exportReportExcel;
+}
+
+if (
+  $("reportEventSearch")
+) {
+
+  $("reportEventSearch")
+    .oninput =
+    renderReportEvents;
+}
+
+if (
+  $("reportOnlyAssigned")
+) {
+
+  $("reportOnlyAssigned")
+    .onchange =
+    renderReportEvents;
+}
+
 /* =========================================================
-   FILTRI EVENTI
+   FILTRI HOME
 ========================================================= */
 
-if ($("viewFilter")) {
+if (
+  $("viewFilter")
+) {
 
-  $("viewFilter").onchange =
+  $("viewFilter")
+    .onchange =
     renderEvents;
 }
 
-if ($("sortFilter")) {
+if (
+  $("sortFilter")
+) {
 
-  $("sortFilter").onchange =
+  $("sortFilter")
+    .onchange =
     renderEvents;
 }
 
-$("eventSearch").oninput =
+$("eventSearch")
+  .oninput =
   renderEvents;
 
-$("statusFilter").onchange =
+$("statusFilter")
+  .onchange =
   renderEvents;
 
 /* =========================================================
