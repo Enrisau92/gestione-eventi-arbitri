@@ -44,7 +44,6 @@
     </div>
     <div class="top-actions">
       <button class="secondary" id="arbiterAvailabilityBtn">Disponibilità arbitri</button>
-      <button class="secondary" id="reportBtn">Report designazioni</button>
       <button class="primary" id="newEventBtn">+ Nuovo evento</button>
     </div>
   </header>
@@ -144,31 +143,6 @@
       <div id="wideSelectedArbiter" class="wide-selected-arbiter hidden"></div>
       <div id="wideEventsList" class="wide-events-list"></div>
       <div class="form-actions"><button type="button" class="ghost" id="cancelWideAvailabilityBtn">Chiudi</button><button type="button" class="primary" id="saveWideAvailabilityBtn">Salva disponibilità</button></div>
-    </div>
-  </div>
-
-  <div id="reportModal" class="modal hidden">
-    <div class="modal-card large report-card">
-      <div class="modal-head">
-        <div><div class="eyebrow">COMUNICAZIONE ALLE SOCIETÀ</div><h2>Report designazioni</h2><div class="muted">Seleziona uno o più eventi per creare una situazione degli arbitri designati.</div></div>
-        <button class="icon" id="closeReportBtn" aria-label="Chiudi">×</button>
-      </div>
-      <div class="report-layout">
-        <section class="report-panel">
-          <h3>Eventi</h3>
-          <div class="report-filters"><input id="reportEventSearch" type="search" placeholder="🔍 Cerca evento…"></div>
-          <label class="report-check"><input id="reportOnlyAssigned" type="checkbox" checked><span>Mostra solo eventi con designazioni</span></label>
-          <div id="reportEventsList" class="report-events-list"></div>
-        </section>
-        <section>
-          <div id="reportPreview" class="report-preview"></div>
-          <div class="report-actions">
-            <button type="button" class="ghost" id="cancelReportBtn">Chiudi</button>
-            <button type="button" class="secondary" id="exportReportBtn">Esporta Excel</button>
-            <button type="button" class="primary" id="printReportBtn">Stampa / PDF</button>
-          </div>
-        </section>
-      </div>
     </div>
   </div>
 
