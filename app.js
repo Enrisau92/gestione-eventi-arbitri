@@ -209,9 +209,13 @@ function renderEvents() {
             </div>
           </div>
 
-          <div class="metric">
-            <strong>${assigned}</strong>
-            <span>designati</span>
+          <div class="metric assigned-metric ${assignedNames.length ? "has-assigned" : ""}">
+            ${
+              assignedNames.length
+                ? `<strong class="assigned-home-names">${assignedNames.map(escapeHtml).join("<br>")}</strong>`
+                : `<strong>0</strong>`
+            }
+            <span>${assignedNames.length === 1 ? "designato" : "designati"}</span>
           </div>
         </div>
 
@@ -1027,7 +1031,84 @@ async function saveWideAvailability() {
 
 let reportSelectedIds = new Set();
 
+
+function installReportStyles() {
+  if ($("report-extra-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "report-extra-style";
+  style.textContent = `
+    /* Home: designati nella terza metrica */
+    .assigned-metric.has-assigned strong.assigned-home-names {
+      display:block;
+      font-size:14px;
+      line-height:1.25;
+      margin:0 0 4px;
+      white-space:normal;
+      overflow-wrap:anywhere;
+    }
+
+    /* Report: annulla le regole globali label input di style.css */
+    #reportModal .report-event-option {
+      display:flex !important;
+      align-items:flex-start !important;
+      gap:10px !important;
+      width:100% !important;
+      margin:0 !important;
+      padding:10px 12px !important;
+      min-width:0 !important;
+      cursor:pointer !important;
+    }
+
+    #reportModal .report-event-option > input[type="checkbox"] {
+      display:block !important;
+      width:auto !important;
+      min-width:16px !important;
+      max-width:16px !important;
+      flex:0 0 16px !important;
+      margin:3px 0 0 !important;
+    }
+
+    #reportModal .report-event-option > span {
+      display:block !important;
+      flex:1 1 auto !important;
+      width:auto !important;
+      min-width:0 !important;
+      overflow-wrap:anywhere !important;
+    }
+
+    #reportModal .report-event-option strong {
+      display:block !important;
+      width:auto !important;
+      font-size:13px !important;
+      line-height:1.3 !important;
+    }
+
+    #reportModal .report-events-container {
+      width:100% !important;
+      min-width:0 !important;
+    }
+
+    #reportModal .modal-card {
+      overflow-x:hidden !important;
+    }
+
+    #closeReportModalBtn {
+      position:relative !important;
+      z-index:20 !important;
+      pointer-events:auto !important;
+    }
+
+    .assigned-home-names {
+      overflow-wrap:anywhere;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function ensureReportUI() {
+
+  installReportStyles();
   if ($("reportDesignazioniBtn")) return;
 
   const topbar = document.querySelector(".topbar");
@@ -1157,6 +1238,7 @@ function ensureReportUI() {
 
       <div
         id="reportEventsList"
+        class="report-events-container"
         style="
           display:grid;
           gap:7px;
@@ -1208,8 +1290,17 @@ function ensureReportUI() {
 
   document.body.appendChild(modal);
 
-  $("closeReportModalBtn").onclick =
-    closeReportModal;
+  $("closeReportModalBtn").onclick = (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeReportModal();
+  };
+
+  $("reportModal").addEventListener("click", (ev) => {
+    if (ev.target === $("reportModal")) {
+      closeReportModal();
+    }
+  });
 
   $("reportSearch").oninput =
     renderReportEvents;
@@ -1373,6 +1464,7 @@ function renderReportEvents() {
 
       return `
         <label
+          class="report-event-option"
           style="
             display:flex;
             align-items:flex-start;
